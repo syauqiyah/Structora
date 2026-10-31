@@ -1,44 +1,143 @@
 import '../utils/app_translations.dart';
 
+String _cleanNorm(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+
+Map<String, dynamic>? findMasterQuizQuestion(String text) {
+  final norm = _cleanNorm(text);
+  if (norm.isEmpty) return null;
+
+  for (final q in preTestQuestions) {
+    final qNorm = _cleanNorm((q['question'] ?? q['q'] ?? '').toString());
+    if (qNorm == norm || (qNorm.length > 15 && norm.contains(qNorm)) || (norm.length > 15 && qNorm.contains(norm))) {
+      return q;
+    }
+  }
+
+  for (final q in postTestQuestions) {
+    final qNorm = _cleanNorm((q['question'] ?? q['q'] ?? '').toString());
+    if (qNorm == norm || (qNorm.length > 15 && norm.contains(qNorm)) || (norm.length > 15 && qNorm.contains(norm))) {
+      return q;
+    }
+  }
+
+  for (final list in asesmenModulQuestions.values) {
+    for (final q in list) {
+      final qNorm = _cleanNorm((q['question'] ?? q['q'] ?? '').toString());
+      if (qNorm == norm || (qNorm.length > 15 && norm.contains(qNorm)) || (norm.length > 15 && qNorm.contains(norm))) {
+        return q;
+      }
+    }
+  }
+
+  return null;
+}
+
 extension QuizLocalizationExtension on Map<String, dynamic> {
   String getLocalizedQuestion([bool? isEnglish]) {
     final en = isEnglish ?? LanguageController.instance.isEnglish;
-    if (en) {
-      final qEn = this['question_en'] ?? this['q_en'];
-      if (qEn != null && qEn.toString().trim().isNotEmpty) {
-        return qEn.toString();
-      }
-      return AppText.auto((this['question'] ?? this['q'] ?? '').toString());
+    final String qIndo = (this['question'] ?? this['q'] ?? '').toString().trim();
+    if (!en) {
+      return qIndo;
     }
-    return (this['question'] ?? this['q'] ?? '').toString();
+
+    final String qEn = (this['question_en'] ?? this['q_en'] ?? '').toString().trim();
+    if (qEn.isNotEmpty && _cleanNorm(qEn) != _cleanNorm(qIndo)) {
+      return qEn;
+    }
+
+    // Try finding master question
+    final master = findMasterQuizQuestion(qIndo);
+    if (master != null) {
+      final masterEn = (master['question_en'] ?? master['q_en'] ?? '').toString().trim();
+      if (masterEn.isNotEmpty && _cleanNorm(masterEn) != _cleanNorm(qIndo)) {
+        return masterEn;
+      }
+    }
+
+    // Fallback to universal auto-translator / dictionary
+    final autoResult = AppText.auto(qIndo);
+    if (autoResult.isNotEmpty && _cleanNorm(autoResult) != _cleanNorm(qIndo)) {
+      return autoResult;
+    }
+
+    return qEn.isNotEmpty ? qEn : qIndo;
   }
 
   List<String> getLocalizedOptions([bool? isEnglish]) {
     final en = isEnglish ?? LanguageController.instance.isEnglish;
-    if (en) {
-      if (this['options_en'] != null && (this['options_en'] as List).isNotEmpty) {
-        return List<String>.from((this['options_en'] as List).map((e) => e.toString()));
-      }
-      final rawOpts = (this['options'] as List? ?? []);
-      return List<String>.from(rawOpts.map((e) => AppText.auto(e.toString())));
+    final List<String> rawOpts = (this['options'] as List? ?? []).map((e) => e.toString().trim()).toList();
+    if (!en) {
+      return rawOpts;
     }
-    return List<String>.from((this['options'] as List? ?? []).map((e) => e.toString()));
+
+    final List? optsEnRaw = this['options_en'] as List?;
+    if (optsEnRaw != null && optsEnRaw.isNotEmpty) {
+      final List<String> optsEn = optsEnRaw.map((e) => e.toString().trim()).toList();
+      bool hasDifferentTranslation = false;
+      for (int i = 0; i < optsEn.length && i < rawOpts.length; i++) {
+        if (_cleanNorm(optsEn[i]) != _cleanNorm(rawOpts[i])) {
+          hasDifferentTranslation = true;
+          break;
+        }
+      }
+      if (hasDifferentTranslation) {
+        return optsEn;
+      }
+    }
+
+    // Lookup in master
+    final String qIndo = (this['question'] ?? this['q'] ?? '').toString().trim();
+    final master = findMasterQuizQuestion(qIndo);
+    if (master != null && master['options_en'] != null) {
+      final masterOpts = (master['options'] as List? ?? []).map((e) => e.toString().trim()).toList();
+      final masterOptsEn = (master['options_en'] as List? ?? []).map((e) => e.toString().trim()).toList();
+
+      List<String> result = [];
+      for (final opt in rawOpts) {
+        final optNorm = _cleanNorm(opt);
+        final idx = masterOpts.indexWhere((m) => _cleanNorm(m) == optNorm);
+        if (idx != -1 && idx < masterOptsEn.length) {
+          result.add(masterOptsEn[idx]);
+        } else {
+          result.add(AppText.auto(opt));
+        }
+      }
+      return result;
+    }
+
+    return rawOpts.map((e) => AppText.auto(e)).toList();
   }
 
   String getLocalizedExplanation([bool? isEnglish]) {
     final en = isEnglish ?? LanguageController.instance.isEnglish;
-    if (en) {
-      final expEn = this['explanation_en'];
-      if (expEn != null && expEn.toString().trim().isNotEmpty) {
-        return expEn.toString();
-      }
-      final rawExp = (this['explanation'] ?? '').toString();
-      if (rawExp.isNotEmpty) {
-        return AppText.auto(rawExp);
-      }
-      return 'Correct answer according to module material script.';
+    final String expIndo = (this['explanation'] ?? '').toString().trim();
+    if (!en) {
+      return expIndo;
     }
-    return (this['explanation'] ?? '').toString();
+
+    final String expEn = (this['explanation_en'] ?? '').toString().trim();
+    if (expEn.isNotEmpty && _cleanNorm(expEn) != _cleanNorm(expIndo)) {
+      return expEn;
+    }
+
+    // Try finding master question
+    final String qIndo = (this['question'] ?? this['q'] ?? '').toString().trim();
+    final master = findMasterQuizQuestion(qIndo);
+    if (master != null) {
+      final masterExpEn = (master['explanation_en'] ?? '').toString().trim();
+      if (masterExpEn.isNotEmpty && _cleanNorm(masterExpEn) != _cleanNorm(expIndo)) {
+        return masterExpEn;
+      }
+    }
+
+    if (expIndo.isNotEmpty) {
+      final autoResult = AppText.auto(expIndo);
+      if (autoResult.isNotEmpty && _cleanNorm(autoResult) != _cleanNorm(expIndo)) {
+        return autoResult;
+      }
+    }
+
+    return 'Correct answer according to module material script.';
   }
 }
 

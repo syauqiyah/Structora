@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -177,13 +178,48 @@ class _LockedQuizScreenState extends State<LockedQuizScreen>
         final String qIndo = (qMap['q'] ?? qMap['question'] ?? '').toString();
         final String qEng = (qMap['q_en'] ?? qMap['question_en'] ?? '').toString();
 
-        final String finalQEn = qEng.isNotEmpty ? qEng : AppText.auto(qIndo);
-        final List<String> finalOptsEn = optionsEnList.isNotEmpty
-            ? optionsEnList.cast<String>()
-            : optionsList.map((opt) => AppText.auto(opt.toString())).toList();
+        final master = findMasterQuizQuestion(qIndo);
+
+        String finalQEn = qEng;
+        if (finalQEn.isEmpty || finalQEn.trim().toLowerCase() == qIndo.trim().toLowerCase()) {
+          if (master != null) {
+            finalQEn = (master['question_en'] ?? master['q_en'] ?? '').toString();
+          }
+        }
+        if (finalQEn.isEmpty || finalQEn.trim().toLowerCase() == qIndo.trim().toLowerCase()) {
+          finalQEn = AppText.translateDirect(qIndo);
+        }
+
+        List<String> finalOptsEn = [];
+        if (optionsEnList.isNotEmpty) {
+          finalOptsEn = optionsEnList.cast<String>();
+        }
+        if (finalOptsEn.isEmpty || finalOptsEn.join('') == optionsList.join('')) {
+          if (master != null && master['options_en'] != null) {
+            final mOpts = List<String>.from(master['options']);
+            final mOptsEn = List<String>.from(master['options_en']);
+            finalOptsEn = optionsList.map((opt) {
+              final idx = mOpts.indexOf(opt.toString());
+              return (idx != -1 && idx < mOptsEn.length) ? mOptsEn[idx] : AppText.translateDirect(opt.toString());
+            }).toList();
+          } else {
+            finalOptsEn = optionsList.map((opt) => AppText.translateDirect(opt.toString())).toList();
+          }
+        }
 
         final String expIndo = (qMap['explanation'] ?? 'Jawaban benar berdasarkan naskah materi yang disusun oleh guru.').toString();
-        final String expEng = (qMap['explanation_en'] ?? 'Correct answer according to module material script.').toString();
+        String expEng = (qMap['explanation_en'] ?? '').toString();
+        if (expEng.isEmpty || expEng.trim().toLowerCase() == expIndo.trim().toLowerCase()) {
+          if (master != null) {
+            expEng = (master['explanation_en'] ?? '').toString();
+          }
+        }
+        if (expEng.isEmpty || expEng.trim().toLowerCase() == expIndo.trim().toLowerCase()) {
+          expEng = AppText.translateDirect(expIndo);
+        }
+        if (expEng.isEmpty || expEng.trim().toLowerCase() == expIndo.trim().toLowerCase()) {
+          expEng = 'Correct answer according to module material script.';
+        }
 
         return {
           'moduleId': targetId,
@@ -244,15 +280,42 @@ class _LockedQuizScreenState extends State<LockedQuizScreen>
 
       final int newAnswerIdx = shuffledOptions.indexOf(correctAnswerText);
 
+      final String itemQIndo = (item['question'] ?? item['q'] ?? '').toString();
+      final master = findMasterQuizQuestion(itemQIndo);
+
+      String qEn = (item['question_en'] ?? item['q_en'] ?? '').toString();
+      if (qEn.isEmpty || qEn.trim().toLowerCase() == itemQIndo.trim().toLowerCase()) {
+        if (master != null) {
+          qEn = (master['question_en'] ?? master['q_en'] ?? '').toString();
+        }
+      }
+      if (qEn.isEmpty || qEn.trim().toLowerCase() == itemQIndo.trim().toLowerCase()) {
+        qEn = AppText.translateDirect(itemQIndo);
+      }
+
+      final String expIndo = (item['explanation'] ?? '').toString();
+      String expEn = (item['explanation_en'] ?? '').toString();
+      if (expEn.isEmpty || expEn.trim().toLowerCase() == expIndo.trim().toLowerCase()) {
+        if (master != null) {
+          expEn = (master['explanation_en'] ?? '').toString();
+        }
+      }
+      if (expEn.isEmpty || expEn.trim().toLowerCase() == expIndo.trim().toLowerCase()) {
+        expEn = AppText.translateDirect(expIndo);
+      }
+      if (expEn.isEmpty || expEn.trim().toLowerCase() == expIndo.trim().toLowerCase()) {
+        expEn = 'Correct answer according to module material script.';
+      }
+
       finalQuestions.add({
         'moduleId': item['moduleId'] ?? '',
-        'question': item['question'],
-        'question_en': item['question_en'] ?? item['question'],
+        'question': itemQIndo,
+        'question_en': qEn,
         'options': shuffledOptions,
         'options_en': shuffledOptionsEn,
         'answer': newAnswerIdx,
-        'explanation': item['explanation'] ?? '',
-        'explanation_en': item['explanation_en'] ?? item['explanation'] ?? '',
+        'explanation': expIndo,
+        'explanation_en': expEn,
       });
     }
 
@@ -300,6 +363,13 @@ class _LockedQuizScreenState extends State<LockedQuizScreen>
         }
       }
     }
+
+    final Map<String, int> answersMap = {};
+    _selectedAnswers.forEach((key, value) {
+      answersMap[key.toString()] = value;
+    });
+    await prefs.setString('answers_${widget.quizType}', jsonEncode(answersMap));
+    await prefs.setString('shuffled_questions_${widget.quizType}', jsonEncode(_questions));
 
     final studentName = prefs.getString('userName') ?? 'Siswa';
     final studentEmail = prefs.getString('userEmail') ?? 'student@structora.app';
@@ -497,9 +567,9 @@ class _LockedQuizScreenState extends State<LockedQuizScreen>
       );
     }
 
-    final q = _questions[_currentIndex];
-    final String qText = isEn ? q['question_en'] : q['question'];
-    final List options = isEn ? q['options_en'] : q['options'];
+    final q = Map<String, dynamic>.from(_questions[_currentIndex]);
+    final String qText = q.getLocalizedQuestion(isEn);
+    final List options = q.getLocalizedOptions(isEn);
     final int? selectedOption = _selectedAnswers[_currentIndex];
     final bool isLast = _currentIndex == _questions.length - 1;
 
@@ -574,7 +644,8 @@ class _LockedQuizScreenState extends State<LockedQuizScreen>
           // Pilihan jawaban
           ...List.generate(options.length, (optIdx) {
             final isChosen = selectedOption == optIdx;
-            final String letter = ['A', 'B', 'C', 'D'][optIdx];
+            const prefixes = ['A', 'B', 'C', 'D', 'E'];
+            final String letter = optIdx < prefixes.length ? prefixes[optIdx] : '${optIdx + 1}';
 
             return Container(
               margin: const EdgeInsets.only(bottom: 10),

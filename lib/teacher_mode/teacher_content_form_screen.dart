@@ -1048,42 +1048,6 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
               ),
               const SizedBox(height: 30),
 
-              // TOMBOL SIMPAN
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  onPressed: _handleSave,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: accentColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(
-                    Icons.save_rounded,
-                    color: Colors.black,
-                  ),
-                  label: Text(
-                    isEn
-                        ? (_isExamOnly
-                        ? 'SAVE EVALUATION QUESTIONS'
-                        : (_isEdit
-                        ? 'SAVE CHANGES'
-                        : 'PUBLISH THIS MEETING'))
-                        : (_isExamOnly
-                        ? 'SIMPAN BANK SOAL EVALUASI'
-                        : (_isEdit
-                        ? 'SIMPAN PERUBAHAN MATERI & ASESMEN'
-                        : 'PUBLIKASIKAN PERTEMUAN INI')),
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         ),

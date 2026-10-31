@@ -384,6 +384,106 @@ class AppText {
     '3. Peek / Top: Views the data at the top position without removing it from the stack.',
     '4. IsEmpty: Memeriksa apakah tumpukan data dalam keadaan kosong.':
     '4. IsEmpty: Checks whether the stack data structure is empty.',
+
+    // Bank Soal Pre-Test & Uji Kemampuan Awal
+    'Struktur data digunakan dalam pemrograman untuk ....':
+    'Data structures are used in computer programming to ....',
+    'Mempercantik tampilan aplikasi saja': 'Beautify application appearance only',
+    'Menyimpan dan mengatur data agar mudah diolah': 'Store and organize data for efficient processing',
+    'Mengganti sistem operasi komputer': 'Replace computer operating systems',
+    'Menghapus seluruh kesalahan program secara otomatis': 'Automatically resolve all software bugs',
+    'Memperbesar ukuran memori komputer': 'Physically expand computer RAM size',
+    'Struktur data berfungsi mengorganisasi dan menyimpan data di memori agar penelusuran dan pemrosesannya efisien.':
+    'Data structures organize and store data in memory to enable efficient access and modification.',
+
+    'Sebuah aplikasi menyimpan data siswa yang jumlahnya dapat bertambah dan berkurang sewaktu-waktu. Struktur data yang setiap elemennya dapat dihubungkan menggunakan pointer adalah ....':
+    'An application stores student records whose quantity changes dynamically. A data structure whose elements are interconnected via pointers is ....',
+    'Linked List tersusun dari kumpulan node dinamis yang saling terhubung melalui pointer.':
+    'A Linked List is composed of dynamic nodes interconnected through pointers.',
+
+    'Dalam kehidupan sehari-hari, tumpukan piring memiliki prinsip bahwa piring yang terakhir diletakkan akan diambil terlebih dahulu. Prinsip ini disebut ....':
+    'In everyday life, a stack of plates operates on the principle that the last plate placed is the first one taken. This principle is called ....',
+    'LIFO (Last In First Out) berarti data yang paling akhir dimasukkan akan diambil terlebih dahulu.':
+    'LIFO (Last In First Out) means that the last item inserted will be retrieved first.',
+
+    'Pada sistem antrean di loket sekolah, siswa yang datang pertama akan dilayani terlebih dahulu. Struktur data yang paling sesuai adalah ....':
+    'In a school counter queue, the first student to arrive is served first. The most appropriate data structure is ....',
+    'Queue menggunakan mekanisme FIFO (First In First Out) di mana yang datang pertama dilayani pertama.':
+    'Queue utilizes a FIFO (First In First Out) mechanism where the earliest arrival is served first.',
+
+    'Seorang guru ingin mengurutkan nilai siswa dari nilai terkecil hingga terbesar. Proses yang harus dilakukan adalah ....':
+    'A teacher wants to order student scores from lowest to highest. The required process is ....',
+    'Sorting adalah proses mengatur elemen data yang acak menjadi berurutan secara sistematis.':
+    'Sorting is the systematic arrangement of unordered data elements into a specified sequence.',
+
+    'Tipe data terstruktur yang ukuran memorinya tetap dan kaku sejak awal dideklarasikan adalah ....':
+    'A structured data type with a fixed and rigid memory allocation defined at declaration is ....',
+    'Array statis': 'Static Array',
+    'Dynamic Stack': 'Dynamic Stack',
+    'Tree pointer': 'Tree pointer',
+    'Array statis memesan blok memori tetap secara berurutan dan ukurannya tidak dapat membesar secara fleksibel.':
+    'Static arrays allocate fixed contiguous memory blocks that cannot expand dynamically.',
+
+    'Operasi dasar untuk menelusuri seluruh data dalam struktur data satu per satu disebut ....':
+    'The foundational operation of visiting every element in a data structure sequentially is called ....',
+    'Traversal adalah kunjungan ke setiap elemen struktur data secara berurutan untuk membaca atau menampilkan isinya.':
+    'Traversal involves visiting every node/element sequentially to read or process its content.',
+
+    'Algoritma yang bertujuan menemukan letak posisi elemen tertentu di dalam sekumpulan data disebut ....':
+    'An algorithm designed to locate the position of a specific target value within a dataset is called ....',
+    'Searching adalah prosedur pencarian untuk menemukan target data yang dicari.':
+    'Searching is an algorithmic procedure to determine whether a target key exists and locate it.',
+
+    'Pengurutan data dari angka terbesar menuju angka terkecil disebut ....':
+    'Arranging data values from highest to lowest is termed ....',
+    'Descending adalah susunan terurut menurun dari nilai terbesar ke nilai terkecil.':
+    'Descending order arranges items in a downward progression from greatest to least.',
+
+    'Komponen utama di dalam memori komputer yang menyimpan alamat dari data lain dinamakan ....':
+    'A core computing construct that holds the memory address of another value is known as a ....',
+    'Pointer / Reference': 'Pointer / Reference',
+    'Pointer menyimpan nilai alamat memori (memory address) yang menunjuk ke lokasi data lainnya.':
+    'A pointer stores the memory address reference pointing directly to another data location.',
+
+    // Bank Soal Post-Test & Asesmen Lanjutan
+    'Pada Linked List, komponen yang menghubungkan sebuah node dengan node berikutnya adalah ....':
+    'In a Linked List, the component that connects a node to the next node is ....',
+    'Next Pointer menunjuk ke alamat memori dari node berikutnya di dalam rantai data.':
+    'Next Pointer contains the memory reference pointing to the succeeding node.',
+
+    'Sebuah Stack memiliki isi dari bawah ke atas berupa A, B, C. Jika dilakukan Pop sebanyak satu kali, isi Stack dari bawah ke atas menjadi ....':
+    'A Stack contains bottom-to-top items A, B, C. After calling Pop() once, the bottom-to-top contents are ....',
+    'Elemen C di puncak dikeluarkan, menyisakan A di bawah dan B di atasnya.':
+    'Element C on top is popped, leaving A at bottom and B on top.',
+
+    'Dalam Queue, data yang pertama kali masuk akan ....':
+    'In a Queue, the item that arrived first will be ....',
+    'Prinsip FIFO menetapkan data pertama yang masuk akan diproses dan dikeluarkan pertama kali.':
+    'FIFO guarantees the earliest arrival is processed and evicted first.',
+
+    'Algoritma yang membandingkan elemen bersebelahan dan menukarnya apabila urutannya salah adalah ....':
+    'The algorithm that compares neighbor elements and swaps them if disordered is ....',
+    'Bubble Sort membandingkan dan menukar dua elemen yang berdampingan secara terus menerus.':
+    'Bubble Sort iteratively swaps adjacent unordered pairs.',
+
+    'Seorang siswa ingin mencari nomor induk tertentu dalam daftar yang belum terurut. Metode yang dapat langsung digunakan tanpa mengurutkan data terlebih dahulu adalah ....':
+    'A student needs to locate an ID in an unsorted list. The method usable without prior sorting is ....',
+    'Linear Search dapat langsung digunakan pada data acak tanpa perlu pengurutan awal.':
+    'Linear Search works out of the box on arbitrary unsorted collections.',
+
+    'Pada Circular Linked List, node terakhir memiliki pointer yang mengarah kembali ke ....':
+    'In a Circular Linked List, the terminal node has a pointer directing back to ....',
+
+    'Dikeluarkan terakhir': 'Dequeued last',
+    'Dikeluarkan pertama': 'Dequeued first',
+    'Selalu berada di tengah': 'Fixed permanently in the middle',
+    'Dipindahkan ke Stack': 'Pushed into a Stack',
+    'Dihapus secara acak': 'Randomly removed',
+    'Node terakhir': 'The last node',
+    'Node pertama': 'The first node',
+    'Node kedua saja': 'The second node only',
+    'Head dan NULL sekaligus': 'Both Head and NULL',
+    'Kosong': 'Empty',
   };
 
   static String tr(String key) {
@@ -394,10 +494,26 @@ class AppText {
   // Fungsi Penerjemah Universal untuk teks dinamis/soal/paragraf
   static String auto(String text) {
     if (!_ctrl.isEnglish) return text;
+    return translateDirect(text);
+  }
+
+  static String translateDirect(String text) {
     final trimmed = text.trim();
+    if (trimmed.isEmpty) return text;
     if (_contentDictionary.containsKey(trimmed)) {
       return _contentDictionary[trimmed]!;
     }
+
+    final normInput = trimmed.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+    if (normInput.isNotEmpty) {
+      for (final entry in _contentDictionary.entries) {
+        final normKey = entry.key.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+        if (normKey.isNotEmpty && normKey == normInput) {
+          return entry.value;
+        }
+      }
+    }
+
     String result = text;
     _contentDictionary.forEach((idKey, enVal) {
       if (result.contains(idKey)) {
