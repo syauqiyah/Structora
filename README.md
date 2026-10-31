@@ -1,8 +1,8 @@
 # 📘 Structora — Interactive Data Structure Learning & Evaluation App
 
 <p align="center">
-  <a href="https://github.com/syauqiyah/Structora/releases/download/v1.0.0/app-release.apk">
-    <img src="https://img.shields.io/badge/📥_Download-Structora_APK_v1.0.0-0284C7?style=for-the-badge&logo=android&logoColor=white" height="45" alt="Download Structora APK">
+  <a href="https://github.com/syauqiyah/Structora/releases/download/v1.1.0/app-release.apk">
+    <img src="https://img.shields.io/badge/📥_Download-Structora_APK_v1.1.0_(Bug_Fix)-0284C7?style=for-the-badge&logo=android&logoColor=white" height="45" alt="Download Structora APK v1.1.0">
   </a>
   <a href="https://github.com/syauqiyah/Structora/releases">
     <img src="https://img.shields.io/badge/📦_GitHub-Releases-22C55E?style=for-the-badge&logo=github&logoColor=white" height="45" alt="GitHub Releases">
@@ -24,11 +24,12 @@
 
 ## 📥 Download Aplikasi (Installer APK)
 
-Klik tombol di bawah ini untuk mengunduh installer APK rilis terbaru secara langsung:
+Klik tombol di bawah ini untuk mengunduh installer APK rilis terbaru yang telah melalui perbaikan bug (*Bug Fix*):
 
-| File Installer | Versi | Status | Tautan Unduh |
-| :--- | :--- | :--- | :--- |
-| **Structora Android App** | `v1.0.0` | 🟢 Rilis Stabil | [📥 **Download app-release.apk**](https://github.com/syauqiyah/Structora/releases/download/v1.0.0/app-release.apk) |
+| File Installer | Versi | Status | Catatan Rilis | Tautan Unduh |
+| :--- | :--- | :--- | :--- | :--- |
+| **Structora Android App** | `v1.1.0` | 🟢 Rilis Terbaru (Bug Fix) | Perbaikan bahasa campur (dwibahasa menyeluruh), sinkronisasi nilai 0 & chart grafik, Firestore fix, serta tombol publikasi materi ganda | [📥 **Download v1.1.0 APK**](https://github.com/syauqiyah/Structora/releases/download/v1.1.0/app-release.apk) |
+| **Structora Android App** | `v1.0.0` | ⚪ Rilis Sebelumnya | Versi awal rilis stabil | [📥 **Download v1.0.0 APK**](https://github.com/syauqiyah/Structora/releases/download/v1.0.0/app-release.apk) |
 
 ---
 
