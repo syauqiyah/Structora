@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/firebase_service.dart';
 
 class TeacherContentHelper {
   // Key v10 agar data Pre-Test, Post-Test, & Modul default dwibahasa terpasang penuh
@@ -691,6 +692,13 @@ Graduation Requirements:
   ];
 
   static Future<List<dynamic>> getMateriList() async {
+    await FirebaseService.syncDefaultMateriIfEmpty(_defaultMateriList);
+
+    final firestoreList = await FirebaseService.getMateriList();
+    if (firestoreList.isNotEmpty) {
+      return firestoreList;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final String? rawJson = prefs.getString(_materiKey);
     if (rawJson == null || rawJson.isEmpty) {
@@ -719,11 +727,9 @@ Graduation Requirements:
     String? modulEn,
     String? descEn,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = await getMateriList();
-
+    final String id = 'mat_${DateTime.now().millisecondsSinceEpoch}';
     final newMateri = {
-      'id': 'mat_${DateTime.now().millisecondsSinceEpoch}',
+      'id': id,
       'title': title,
       'title_en': titleEn ?? title,
       'modul': modul,
@@ -736,6 +742,10 @@ Graduation Requirements:
       '${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
     };
 
+    await FirebaseService.saveOrUpdateMateri(newMateri);
+
+    final prefs = await SharedPreferences.getInstance();
+    final list = await getMateriList();
     list.add(newMateri);
     await prefs.setString(_materiKey, jsonEncode(list));
   }
@@ -751,6 +761,20 @@ Graduation Requirements:
     String? modulEn,
     String? descEn,
   }) async {
+    final updatedMateri = {
+      'id': id,
+      'title': title,
+      'title_en': titleEn ?? title,
+      'modul': modul,
+      'modul_en': modulEn ?? modul,
+      'desc': desc,
+      'desc_en': descEn ?? desc,
+      'videoUrl': videoUrl,
+      'questions': questions,
+    };
+
+    await FirebaseService.saveOrUpdateMateri(updatedMateri);
+
     final prefs = await SharedPreferences.getInstance();
     final list = await getMateriList();
 
@@ -769,6 +793,8 @@ Graduation Requirements:
   }
 
   static Future<void> deleteMateri(String id) async {
+    await FirebaseService.deleteMateri(id);
+
     final prefs = await SharedPreferences.getInstance();
     final list = await getMateriList();
     list.removeWhere((item) => item['id'] == id);
@@ -776,6 +802,11 @@ Graduation Requirements:
   }
 
   static Future<List<dynamic>?> getQuestionsForModule(String moduleId) async {
+    final firestoreQ = await FirebaseService.getQuestionsForModule(moduleId);
+    if (firestoreQ != null && firestoreQ.isNotEmpty) {
+      return firestoreQ;
+    }
+
     final list = await getMateriList();
     final cleanId = moduleId.toLowerCase().trim();
 

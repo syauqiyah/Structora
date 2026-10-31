@@ -301,8 +301,8 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
         caseSensitive: false,
       ).firstMatch(line);
 
-      final optMatch = RegExp(r'^([A-Da-d])[\.\)]\s*(.*)$').firstMatch(line);
-      final qMatch = RegExp(r'^\d+[\.\)]\s*(.*)$').firstMatch(line);
+      final optMatch = RegExp(r'^([A-Da-d])[.)]\s*(.*)$').firstMatch(line);
+      final qMatch = RegExp(r'^\d+[.)]\s*(.*)$').firstMatch(line);
 
       if (ansMatch != null) {
         final char = ansMatch.group(1)!.toUpperCase();

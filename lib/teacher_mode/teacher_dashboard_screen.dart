@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../screens/auth_screen.dart';
-import '../utils/app_translations.dart'; // Import controller & AppText
+import '../services/firebase_service.dart';
+import '../utils/app_translations.dart';
 import 'teacher_data_helper.dart';
 import 'student_progress_screen.dart';
 import 'teacher_manage_content_screen.dart';
@@ -11,6 +13,7 @@ import 'teacher_manage_content_screen.dart';
 class TeacherDashboardScreen extends StatefulWidget {
   final bool isDarkMode;
   final double fontScale;
+  final VoidCallback? onLogout;
   final Function(bool)? onToggleTheme;
   final Function(double)? onChangeFontScale;
 
@@ -18,6 +21,7 @@ class TeacherDashboardScreen extends StatefulWidget {
     super.key,
     required this.isDarkMode,
     required this.fontScale,
+    this.onLogout,
     this.onToggleTheme,
     this.onChangeFontScale,
   });
@@ -149,18 +153,31 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isLoggedIn', false);
     await prefs.setBool('isTeacher', false);
+    await prefs.remove('userRole');
+
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (_) {}
+
+    if (widget.onLogout != null) {
+      widget.onLogout!();
+      return;
+    }
 
     if (!mounted) return;
-    Navigator.pushReplacement(
+    Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (context) => AuthScreen(
-          isDarkMode: _isDark,
-          onLoginSuccess: (name, email) {},
+        builder: (context) => const AuthScreen(
+          isDarkMode: true,
+          onLoginSuccess: _dummyOnLoginSuccess,
         ),
       ),
+      (route) => false,
     );
   }
+
+  static void _dummyOnLoginSuccess(String name, String email, bool isTeacher) {}
 
   void _openProfileSettingsSheet() {
     showGeneralDialog(
@@ -451,6 +468,51 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
+  Widget _buildScoreBadge(
+    String label,
+    String value,
+    Color color,
+    Color textColor,
+    Color subTextColor,
+  ) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
+        ),
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9.5,
+                color: subTextColor,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: color,
+                fontFamily: 'monospace',
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bgColor =
@@ -645,155 +707,173 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: borderColor),
                       ),
-                      child: _studentList.isEmpty
-                          ? Center(
-                        child: Text(
-                          AppText.tr('no_student_data'),
-                          style: TextStyle(
-                              color: subTextColor, fontSize: 13),
-                        ),
-                      )
-                          : ListView.separated(
-                        itemCount: _studentList.length,
-                        separatorBuilder: (_, __) => Divider(
-                            height: 1,
-                            color: borderColor),
-                        itemBuilder: (context, index) {
-                          final student = _studentList[index]
-                          as Map<String, dynamic>;
-                          final String status =
-                              student['status'] ?? 'Belum Ujian';
-                          final bool isTuntas = status.toLowerCase().contains('tuntas') || status.toLowerCase().contains('completed');
-                          final bool isEn = LanguageController.instance.isEnglish;
-                          final String displayStatus = isEn
-                              ? (isTuntas ? 'Completed' : 'Not Tested')
-                              : (isTuntas ? 'Tuntas' : 'Belum Ujian');
+                      child: StreamBuilder<List<Map<String, dynamic>>>(
+                        stream: FirebaseService.streamStudentProgressList(),
+                        builder: (context, snapshot) {
+                          final List students = (snapshot.hasData && snapshot.data!.isNotEmpty)
+                              ? snapshot.data!
+                              : _studentList;
 
-                          final String pre =
-                              student['preTest'] ?? '-';
-                          final String a1 =
-                              student['assessment1'] ?? '-';
-                          final String a2 =
-                              student['assessment2'] ?? '-';
-                          final String a3 =
-                              student['assessment3'] ?? '-';
-                          final String a4 =
-                              student['assessment4'] ?? '-';
-                          final String post =
-                              student['postTest'] ?? '-';
+                          if (students.isEmpty) {
+                            return Center(
+                              child: Text(
+                                AppText.tr('no_student_data'),
+                                style: TextStyle(
+                                    color: subTextColor, fontSize: 13),
+                              ),
+                            );
+                          }
 
-                          List<String> finishedAses = [];
-                          if (a1 != '-') finishedAses.add(a1);
-                          if (a2 != '-') finishedAses.add(a2);
-                          if (a3 != '-') finishedAses.add(a3);
-                          if (a4 != '-') finishedAses.add(a4);
+                          return ListView.separated(
+                            itemCount: students.length,
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            separatorBuilder: (_, __) => const SizedBox(height: 8),
+                            itemBuilder: (context, index) {
+                              final student = students[index]
+                              as Map<String, dynamic>;
+                              final String status =
+                                  student['status'] ?? 'Belum Ujian';
+                              final bool isTuntas = status.toLowerCase().contains('tuntas') || status.toLowerCase().contains('completed');
+                              final bool isEn = LanguageController.instance.isEnglish;
+                              final String displayStatus = isEn
+                                  ? (isTuntas ? 'Completed' : 'Not Tested')
+                                  : (isTuntas ? 'Tuntas' : 'Belum Ujian');
 
-                          final String asesmenSummary =
-                          finishedAses.isEmpty
-                              ? '-'
-                              : finishedAses.join(', ');
+                              final String pre = student['preTest'] ?? '-';
+                              final String a1 = student['assessment1'] ?? '-';
+                              final String a2 = student['assessment2'] ?? '-';
+                              final String a3 = student['assessment3'] ?? '-';
+                              final String a4 = student['assessment4'] ?? '-';
+                              final String post = student['postTest'] ?? '-';
 
-                          return InkWell(
-                            borderRadius:
-                            BorderRadius.circular(14),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      StudentDetailScreen(
-                                          studentData: student),
+                              List<String> finishedAses = [];
+                              if (a1 != '-') finishedAses.add(a1);
+                              if (a2 != '-') finishedAses.add(a2);
+                              if (a3 != '-') finishedAses.add(a3);
+                              if (a4 != '-') finishedAses.add(a4);
+
+                              final String asesmenSummary = finishedAses.isEmpty
+                                  ? '-'
+                                  : finishedAses.join(', ');
+
+                              return Card(
+                                elevation: 0,
+                                color: cardBg,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(color: borderColor),
                                 ),
-                              ).then((_) =>
-                                  _loadTeacherAndStudentData());
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 12),
-                              child: Row(
-                                children: [
-                                  CircleAvatar(
-                                    backgroundColor: accentColor
-                                        .withValues(alpha: 0.1),
-                                    child: Text('${index + 1}',
-                                        style: const TextStyle(
-                                            fontWeight:
-                                            FontWeight.bold,
-                                            color: accentColor,
-                                            fontSize: 13)),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
+                                margin: const EdgeInsets.symmetric(horizontal: 10),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(12),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            StudentDetailScreen(
+                                                studentData: student),
+                                      ),
+                                    ).then((_) =>
+                                        _loadTeacherAndStudentData());
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
                                     child: Column(
-                                      crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(
-                                            student['name'] ??
-                                                (isEn ? 'Unnamed Student' : 'Tanpa Nama'),
-                                            style: TextStyle(
-                                                fontWeight:
-                                                FontWeight.bold,
-                                                fontSize: 13,
-                                                color: textColor)),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                            student['email'] ?? '-',
-                                            style: TextStyle(
-                                                fontSize: 11,
-                                                color:
-                                                subTextColor)),
+                                        Row(
+                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 14,
+                                              backgroundColor: accentColor
+                                                  .withValues(alpha: 0.15),
+                                              child: Text('${index + 1}',
+                                                  style: const TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      color: accentColor,
+                                                      fontSize: 11)),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    student['name'] ??
+                                                        (isEn ? 'Unnamed Student' : 'Tanpa Nama'),
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 13,
+                                                      color: textColor,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                  Text(
+                                                    student['email'] ?? '-',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: subTextColor,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                  horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: isTuntas
+                                                    ? Colors.green
+                                                        .withValues(alpha: 0.15)
+                                                    : Colors.orange
+                                                        .withValues(alpha: 0.15),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                                border: Border.all(
+                                                  color: isTuntas
+                                                      ? Colors.green
+                                                          .withValues(alpha: 0.4)
+                                                      : Colors.orange
+                                                          .withValues(alpha: 0.4),
+                                                ),
+                                              ),
+                                              child: Text(
+                                                displayStatus,
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isTuntas
+                                                      ? Colors.green
+                                                      : Colors.orange,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Divider(height: 1, color: borderColor),
+                                        const SizedBox(height: 10),
+                                        Row(
+                                          children: [
+                                            _buildScoreBadge('Pre-Test', pre, const Color(0xFF0284C7), textColor, subTextColor),
+                                            const SizedBox(width: 6),
+                                            _buildScoreBadge('Asesmen Modul', asesmenSummary, const Color(0xFFD97706), textColor, subTextColor),
+                                            const SizedBox(width: 6),
+                                            _buildScoreBadge('Post-Test', post, const Color(0xFF8B5CF6), textColor, subTextColor),
+                                          ],
+                                        ),
                                       ],
                                     ),
                                   ),
-                                  Column(
-                                    crossAxisAlignment:
-                                    CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        'Pre: $pre | Ases: $asesmenSummary | Post: $post',
-                                        style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight:
-                                            FontWeight.bold,
-                                            color: textColor,
-                                            fontFamily:
-                                            'monospace'),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Container(
-                                        padding: const EdgeInsets
-                                            .symmetric(
-                                            horizontal: 8,
-                                            vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: isTuntas
-                                              ? Colors.green
-                                              .withValues(
-                                              alpha: 0.15)
-                                              : Colors.orange
-                                              .withValues(
-                                              alpha: 0.15),
-                                          borderRadius:
-                                          BorderRadius.circular(
-                                              6),
-                                        ),
-                                        child: Text(
-                                          displayStatus,
-                                          style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight:
-                                              FontWeight.bold,
-                                              color: isTuntas
-                                                  ? Colors.green
-                                                  : Colors.orange),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
+                                ),
+                              );
+                            },
                           );
                         },
                       ),

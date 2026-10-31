@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/firebase_service.dart';
 import '../utils/app_translations.dart';
 
 class TeacherDataHelper {
@@ -24,7 +25,7 @@ class TeacherDataHelper {
     }
   }
 
-  // Menyimpan atau memperbarui progres mahasiswa
+  // Menyimpan atau memperbarui progres mahasiswa ke Cloud Firestore & Lokal
   static Future<void> recordStudentProgress({
     required String name,
     required String email,
@@ -36,6 +37,20 @@ class TeacherDataHelper {
     String postTestScore = '-',
     String status = 'Belum Ujian',
   }) async {
+    // 1. Simpan ke Cloud Firestore
+    await FirebaseService.saveStudentProgress(
+      name: name,
+      email: email,
+      preTestScore: preTestScore,
+      assessment1: assessment1,
+      assessment2: assessment2,
+      assessment3: assessment3,
+      assessment4: assessment4,
+      postTestScore: postTestScore,
+      status: status,
+    );
+
+    // 2. Simpan ke SharedPreferences lokal
     final prefs = await SharedPreferences.getInstance();
 
     List<String> rawList =
@@ -102,8 +117,15 @@ class TeacherDataHelper {
     await prefs.setStringList('real_student_progress_list', rawList);
   }
 
-  // Mengambil seluruh data progres mahasiswa (tipe return dibuat dynamic list agar aman dari error operator generic)
+  // Mengambil seluruh data progres mahasiswa dari Firestore atau cache lokal
   static Future<List<dynamic>> getRealStudentList() async {
+    // 1. Coba dari Firestore
+    final firestoreList = await FirebaseService.getStudentList();
+    if (firestoreList.isNotEmpty) {
+      return firestoreList;
+    }
+
+    // 2. Fallback ke SharedPreferences lokal
     final prefs = await SharedPreferences.getInstance();
 
     final List<String> rawList =

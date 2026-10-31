@@ -3,11 +3,12 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../teacher_mode/teacher_data_helper.dart';
+import '../services/firebase_service.dart';
 import '../utils/app_translations.dart';
 
 class AuthScreen extends StatefulWidget {
   final bool isDarkMode;
-  final Function(String name, String email) onLoginSuccess;
+  final Function(String name, String email, bool isTeacher) onLoginSuccess;
 
   const AuthScreen({
     super.key,
@@ -109,13 +110,24 @@ class _AuthScreenState extends State<AuthScreen> {
       await prefs.setString('userEmail', demoEmail);
       await prefs.setString('lastEmail', demoEmail);
       await prefs.setBool('isTeacher', isTeacher);
+      await prefs.setString('userRole', isTeacher ? 'teacher' : 'student');
       await prefs.setInt(
         'lastActiveTimestamp',
         DateTime.now().millisecondsSinceEpoch,
       );
 
+      final String demoUid = 'demo_${isTeacher ? "teacher" : "student"}';
+
+      // Sinkronkan peran ke Firestore di latar belakang (non-blocking)
+      FirebaseService.saveUserRole(
+        uid: demoUid,
+        email: demoEmail,
+        name: demoName,
+        role: isTeacher ? 'teacher' : 'student',
+      );
+
       if (!isTeacher) {
-        await TeacherDataHelper.recordStudentProgress(
+        TeacherDataHelper.recordStudentProgress(
           name: demoName,
           email: demoEmail,
           preTestScore: '-',
@@ -126,7 +138,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
       if (!mounted) return;
       setState(() => _isLoading = false);
-      widget.onLoginSuccess(demoName, demoEmail);
+      widget.onLoginSuccess(demoName, demoEmail, isTeacher);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -211,7 +223,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
         if (!mounted) return;
         setState(() => _isLoading = false);
-        widget.onLoginSuccess(finalName, email);
+        widget.onLoginSuccess(finalName, email, isTeacher);
         return;
       }
 
@@ -222,8 +234,20 @@ class _AuthScreenState extends State<AuthScreen> {
           password: pass,
         );
 
-        await credential.user?.updateDisplayName(name);
-        await credential.user?.sendEmailVerification();
+        final user = credential.user;
+        if (user != null) {
+          await user.updateDisplayName(name);
+          await user.sendEmailVerification();
+
+          // Simpan Peran & Profil di Cloud Firestore
+          await FirebaseService.saveUserRole(
+            uid: user.uid,
+            email: email,
+            name: name,
+            role: isTeacher ? 'teacher' : 'student',
+          );
+        }
+
         await FirebaseAuth.instance.signOut();
 
         await prefs.setString('userName', name);
@@ -284,10 +308,35 @@ class _AuthScreenState extends State<AuthScreen> {
             fallback.isEmpty ? (isTeacher ? (isEn ? 'Teacher' : 'Guru') : (isEn ? 'Student' : 'Siswa')) : fallback;
       }
 
+      // Simpan/Sinkronkan Peran ke Cloud Firestore di latar belakang (non-blocking)
+      FirebaseService.saveUserRole(
+        uid: refreshedUser.uid,
+        email: email,
+        name: detectedName,
+        role: isTeacher ? 'teacher' : 'student',
+      );
+
       await prefs.setBool('isLoggedIn', true);
       await prefs.setString('userName', detectedName);
       await prefs.setString('saved_name_$emailClean', detectedName);
       await prefs.setString('userEmail', email);
+      await prefs.setString('lastEmail', email);
+      await prefs.setBool('isTeacher', isTeacher);
+      await prefs.setString('userRole', isTeacher ? 'teacher' : 'student');
+      await prefs.setInt(
+        'lastActiveTimestamp',
+        DateTime.now().millisecondsSinceEpoch,
+      );
+
+      if (!isTeacher) {
+        TeacherDataHelper.recordStudentProgress(
+          name: detectedName,
+          email: email,
+          preTestScore: '-',
+          postTestScore: '-',
+          status: isEn ? 'Not Tested' : 'Belum Ujian',
+        );
+      }
       await prefs.setString('lastEmail', email);
       await prefs.setBool('isTeacher', isTeacher);
       await prefs.setInt(
@@ -307,7 +356,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
       if (!mounted) return;
       setState(() => _isLoading = false);
-      widget.onLoginSuccess(detectedName, email);
+      widget.onLoginSuccess(detectedName, email, isTeacher);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);

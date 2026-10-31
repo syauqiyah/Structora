@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/materi_data.dart';
 import '../services/notification_service.dart';
+import '../services/firebase_service.dart';
 import '../utils/app_translations.dart';
 import '../widgets/evaluation_tab_widget.dart';
 import '../widgets/interactive_spotlight_overlay.dart';
@@ -319,6 +320,18 @@ class _MainScreenState extends State<MainScreen> {
       });
       await prefs.setStringList('completed_steps', _completedSteps.toList());
       await prefs.setInt('lastActiveTimestamp', DateTime.now().millisecondsSinceEpoch);
+
+      final userEmail = prefs.getString('userEmail') ?? widget.userEmail;
+      final userName = prefs.getString('userName') ?? widget.userName;
+      if (userEmail.isNotEmpty) {
+        FirebaseService.saveStudentProgress(
+          name: userName,
+          email: userEmail,
+          preTestScore: _isPreTestCompleted ? '$_preTestScore' : '-',
+          postTestScore: _isPostTestCompleted ? '$_postTestScore' : '-',
+          completedSteps: _completedSteps.toList(),
+        );
+      }
     }
   }
 
@@ -328,18 +341,24 @@ class _MainScreenState extends State<MainScreen> {
     return count / steps.length;
   }
 
+  List<Map<String, dynamic>> get _learningModules {
+    final list = _dynamicTeacherMateri.where((item) {
+      final id = (item['id'] ?? '').toString().toLowerCase();
+      return id != 'pretest' && id != 'posttest';
+    }).toList();
+    if (list.isNotEmpty) {
+      return list.cast<Map<String, dynamic>>();
+    }
+    return listModulMateri;
+  }
+
   int _getTotalCompletedPoints() {
     int points = 0;
     if (_isPreTestCompleted) points++;
-    final int activeCount = _dynamicTeacherMateri.isNotEmpty &&
-        _dynamicTeacherMateri.length > listModulMateri.length
-        ? _dynamicTeacherMateri.length
-        : listModulMateri.length;
+    final modules = _learningModules;
 
-    for (int i = 0; i < activeCount; i++) {
-      final String mId = i < _dynamicTeacherMateri.length
-          ? (_dynamicTeacherMateri[i]['id'] ?? 'modul_${i + 1}')
-          : listModulMateri[i]['id'];
+    for (int i = 0; i < modules.length; i++) {
+      final String mId = modules[i]['id'] ?? 'modul_${i + 1}';
       if (_completedSteps.contains('${mId}_penjelasan')) points++;
       if (_completedSteps.contains('${mId}_video')) points++;
       if (_completedSteps.contains('${mId}_asesmen')) points++;
@@ -349,11 +368,8 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   int _getTotalTargetPoints() {
-    final int activeCount = _dynamicTeacherMateri.isNotEmpty &&
-        _dynamicTeacherMateri.length > listModulMateri.length
-        ? _dynamicTeacherMateri.length
-        : listModulMateri.length;
-    return 1 + (activeCount * 3) + 1;
+    final modules = _learningModules;
+    return 1 + (modules.length * 3) + 1;
   }
 
   double _getOverallProgressRatio() {
@@ -366,8 +382,9 @@ class _MainScreenState extends State<MainScreen> {
     if (index == 0) return true;
 
     final prevIndex = index - 1;
-    final String prevModuleId = prevIndex < _dynamicTeacherMateri.length
-        ? (_dynamicTeacherMateri[prevIndex]['id'] ?? 'modul_${prevIndex + 1}')
+    final modules = _learningModules;
+    final String prevModuleId = prevIndex < modules.length
+        ? (modules[prevIndex]['id'] ?? 'modul_${prevIndex + 1}')
         : listModulMateri[prevIndex]['id'];
 
     return _getModuleProgressRatio(prevModuleId) >= 1.0;
@@ -382,15 +399,10 @@ class _MainScreenState extends State<MainScreen> {
 
   bool _areAllModulesCompleted() {
     if (!_isPreTestCompleted) return false;
-    final int activeCount = _dynamicTeacherMateri.isNotEmpty &&
-        _dynamicTeacherMateri.length > listModulMateri.length
-        ? _dynamicTeacherMateri.length
-        : listModulMateri.length;
+    final modules = _learningModules;
 
-    for (int i = 0; i < activeCount; i++) {
-      final String mId = i < _dynamicTeacherMateri.length
-          ? (_dynamicTeacherMateri[i]['id'] ?? 'modul_${i + 1}')
-          : listModulMateri[i]['id'];
+    for (int i = 0; i < modules.length; i++) {
+      final String mId = modules[i]['id'] ?? 'modul_${i + 1}';
       if (_getModuleProgressRatio(mId) < 1.0) return false;
     }
     return true;
@@ -1333,6 +1345,7 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildMateriTab() {
     final isEn = LanguageController.instance.isEnglish;
+    final modules = _learningModules;
 
     // JIKA MODUL SEDANG DIBUKA (DETAIL MATERI, VIDEO, & ASESMEN)
     if (_openedMateriIndex != null) {
@@ -1340,10 +1353,10 @@ class _MainScreenState extends State<MainScreen> {
       final bool isBaseModule = idx < listModulMateri.length;
       final baseModul = isBaseModule ? listModulMateri[idx] : null;
 
-      // 1. Ambil data dinamis guru secara presisi
+      // 1. Ambil data dinamis modul pembelajaran saja (tanpa pretest/posttest)
       Map<String, dynamic>? teacherItem;
-      if (idx < _dynamicTeacherMateri.length) {
-        teacherItem = Map<String, dynamic>.from(_dynamicTeacherMateri[idx] as Map);
+      if (idx < modules.length) {
+        teacherItem = modules[idx];
       }
 
       final String currentModulId = teacherItem?['id'] ??
@@ -1532,12 +1545,6 @@ class _MainScreenState extends State<MainScreen> {
       );
     }
 
-    // HITUNG TOTAL MODUL AKTIF (MENCAKUP MODUL BARU TAMBAHAN GURU)
-    final int activeModuleCount = _dynamicTeacherMateri.isNotEmpty &&
-        _dynamicTeacherMateri.length > listModulMateri.length
-        ? _dynamicTeacherMateri.length
-        : listModulMateri.length;
-
     final bool allDone = _areAllModulesCompleted();
 
     return Column(
@@ -1595,23 +1602,20 @@ class _MainScreenState extends State<MainScreen> {
         ),
         const SizedBox(height: 16),
 
-        // DAFTAR KARTU MODUL DINAMIS (OTOMATIS BERTAMBAH JIKA ADA PERTEMUAN 5, 6, DST)
-        ...List.generate(activeModuleCount, (idx) {
+        // DAFTAR KARTU MODUL DINAMIS (HANYA SIKLUS MODUL SESI PEMBELAJARAN)
+        ...List.generate(modules.length, (idx) {
           final bool isBaseModule = idx < listModulMateri.length;
           final m = isBaseModule ? listModulMateri[idx] : null;
 
-          Map<String, dynamic>? tItem;
-          if (idx < _dynamicTeacherMateri.length) {
-            tItem = Map<String, dynamic>.from(_dynamicTeacherMateri[idx] as Map);
-          }
+          final Map<String, dynamic> tItem = modules[idx];
 
-          final String moduleId = tItem?['id'] ?? (m != null ? m['id'] : 'modul_${idx + 1}');
+          final String moduleId = tItem['id'] ?? (m != null ? m['id'] : 'modul_${idx + 1}');
           final String dynamicTitle = isEn
-              ? (tItem?['title_en'] ?? m?.getLocalizedTitle(true) ?? AppText.auto(tItem?['title'] ?? ''))
-              : (tItem?['title'] ?? m?.getLocalizedTitle(false) ?? 'Pertemuan ${idx + 1}');
+              ? (tItem['title_en'] ?? m?.getLocalizedTitle(true) ?? AppText.auto(tItem['title'] ?? ''))
+              : (tItem['title'] ?? m?.getLocalizedTitle(false) ?? 'Pertemuan ${idx + 1}');
           final String dynamicDesc = isEn
-              ? (tItem?['desc_en'] ?? m?.getLocalizedDesc(true) ?? AppText.auto(tItem?['desc'] ?? ''))
-              : (tItem?['desc'] ?? m?.getLocalizedDesc(false) ?? 'Materi Pembelajaran Baru');
+              ? (tItem['desc_en'] ?? m?.getLocalizedDesc(true) ?? AppText.auto(tItem['desc'] ?? ''))
+              : (tItem['desc'] ?? m?.getLocalizedDesc(false) ?? 'Materi Pembelajaran Baru');
           final Color color = m != null ? (m['color'] as Color) : const Color(0xFF00F0FF);
           final IconData icon = m != null ? m['icon'] : Icons.menu_book_rounded;
 
@@ -1631,8 +1635,8 @@ class _MainScreenState extends State<MainScreen> {
                   return;
                 }
 
-                final prevName = idx - 1 < _dynamicTeacherMateri.length
-                    ? (_dynamicTeacherMateri[idx - 1]['title'] ?? 'Pertemuan $idx')
+                final prevName = idx - 1 < modules.length
+                    ? (isEn ? (modules[idx - 1]['title_en'] ?? AppText.auto(modules[idx - 1]['title'] ?? '')) : (modules[idx - 1]['title'] ?? 'Pertemuan $idx'))
                     : listModulMateri[idx - 1].getLocalizedTitle(isEn);
 
                 showDialog(

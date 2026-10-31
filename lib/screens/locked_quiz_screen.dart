@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/quiz_data.dart';
 import '../services/notification_service.dart';
 import '../teacher_mode/teacher_content_helper.dart';
+import '../teacher_mode/teacher_data_helper.dart';
 import '../utils/app_translations.dart';
 
 class LockedQuizScreen extends StatefulWidget {
@@ -202,10 +203,26 @@ class _LockedQuizScreenState extends State<LockedQuizScreen>
       rawList = List<dynamic>.from(getQuestionsForType(widget.quizType));
     }
 
-    rawList.shuffle();
+    // DEDUPLIKASI KETAT BERDASARKAN TEKS SOAL (Pencegahan Soal Dobel)
+    final Set<String> seenQuestions = {};
+    final List<dynamic> uniqueRawList = [];
 
-    final int questionLimit = rawList.length;
-    final selectedPool = rawList.take(questionLimit).toList();
+    for (var item in rawList) {
+      final String qText = (item['question'] ?? item['q'] ?? '').toString().trim().toLowerCase();
+      if (qText.isNotEmpty && !seenQuestions.contains(qText)) {
+        seenQuestions.add(qText);
+        uniqueRawList.add(item);
+      }
+    }
+
+    uniqueRawList.shuffle();
+
+    // Jumlah soal: Pre-test 5 soal acak unik, Post-test & Asesmen modul 5-10 soal unik
+    final int questionLimit = widget.quizType == 'pretest'
+        ? (uniqueRawList.length >= 5 ? 5 : uniqueRawList.length)
+        : (uniqueRawList.length >= 5 && widget.quizType.startsWith('asesmen_') ? 5 : uniqueRawList.length);
+
+    final selectedPool = uniqueRawList.take(questionLimit).toList();
 
     List<dynamic> finalQuestions = [];
 
@@ -285,6 +302,29 @@ class _LockedQuizScreenState extends State<LockedQuizScreen>
     }
 
     final studentName = prefs.getString('userName') ?? 'Siswa';
+    final studentEmail = prefs.getString('userEmail') ?? 'student@structora.app';
+
+    final int preScore = prefs.getInt('preTestScore') ?? (widget.quizType == 'pretest' ? score : 0);
+    final int postScore = prefs.getInt('postTestScore') ?? (widget.quizType == 'posttest' ? score : 0);
+    final int a1Score = prefs.getInt('score_linkedlist') ?? 0;
+    final int a2Score = prefs.getInt('score_stack') ?? 0;
+    final int a3Score = prefs.getInt('score_queue') ?? 0;
+    final int a4Score = prefs.getInt('score_searching_sorting') ?? 0;
+
+    final bool isCompleted = (widget.quizType == 'posttest') || prefs.getBool('isPostTestCompleted') == true;
+
+    await TeacherDataHelper.recordStudentProgress(
+      name: studentName,
+      email: studentEmail,
+      preTestScore: preScore > 0 || prefs.getBool('isPreTestCompleted') == true ? '$preScore' : '-',
+      assessment1: a1Score > 0 ? '$a1Score' : '-',
+      assessment2: a2Score > 0 ? '$a2Score' : '-',
+      assessment3: a3Score > 0 ? '$a3Score' : '-',
+      assessment4: a4Score > 0 ? '$a4Score' : '-',
+      postTestScore: postScore > 0 || isCompleted ? '$postScore' : '-',
+      status: isCompleted ? (postScore >= 80 ? 'Tuntas' : 'Belum Ujian') : 'Belum Ujian',
+    );
+
     NotificationService.syncStudyReminder(studentName: studentName);
 
     setState(() {

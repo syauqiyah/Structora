@@ -74,10 +74,6 @@ class _StructuraAppState extends State<StructuraApp> {
     await prefs.setDouble('fontScale', scale);
   }
 
-  void _toggleLanguage() {
-    LanguageController.instance.toggleLanguage();
-  }
-
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(

@@ -6,7 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'auth_screen.dart';
 import 'main_screen.dart';
-import '../teacher_mode/teacher_dashboard_screen.dart'; // <-- Tambahan import untuk Portal Guru
+import '../teacher_mode/teacher_dashboard_screen.dart';
+import '../services/firebase_service.dart';
 
 class SplashScreen extends StatefulWidget {
   final bool isDarkMode;
@@ -411,9 +412,17 @@ class _RootGateState extends State<RootGate> {
 
   Future<void> _checkLoginStatus() async {
     final prefs = await SharedPreferences.getInstance();
-    final bool isTeacherRole = prefs.getBool('isTeacher') ?? false;
+    bool isTeacherRole = prefs.getBool('isTeacher') ?? false;
 
     if (prefs.getBool('isLoggedIn') == true) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final firestoreRole = await FirebaseService.getUserRole(user.uid);
+        if (firestoreRole != null) {
+          isTeacherRole = firestoreRole == 'teacher';
+        }
+      }
+
       setState(() {
         _isLoggedIn = true;
         _isTeacher = isTeacherRole;
@@ -436,6 +445,11 @@ class _RootGateState extends State<RootGate> {
           await user.reload();
         } catch (_) {}
         if (user.emailVerified) {
+          final firestoreRole = await FirebaseService.getUserRole(user.uid);
+          if (firestoreRole != null) {
+            isTeacherRole = firestoreRole == 'teacher';
+          }
+
           final emailClean = user.email?.toLowerCase().trim() ?? '';
           final savedName = prefs.getString('saved_name_$emailClean');
 
@@ -464,14 +478,19 @@ class _RootGateState extends State<RootGate> {
     setState(() => _isLoading = false);
   }
 
-  void _onLoginSuccess(String name, String email) async {
+  void _onLoginSuccess(String name, String email, bool isTeacher) async {
     final prefs = await SharedPreferences.getInstance();
-    final bool isTeacherRole = prefs.getBool('isTeacher') ?? false;
+    await prefs.setBool('isLoggedIn', true);
+    await prefs.setBool('isTeacher', isTeacher);
+    await prefs.setString('userRole', isTeacher ? 'teacher' : 'student');
+    await prefs.setString('userName', name);
+    await prefs.setString('userEmail', email);
+
     setState(() {
       _userName = name;
       _userEmail = email;
       _isLoggedIn = true;
-      _isTeacher = isTeacherRole;
+      _isTeacher = isTeacher;
     });
   }
 
@@ -484,8 +503,10 @@ class _RootGateState extends State<RootGate> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isLoggedIn', false);
     await prefs.setBool('isTeacher', false);
+    await prefs.remove('userRole');
     await prefs.remove('userName');
     await prefs.remove('userEmail');
+
     setState(() {
       _isLoggedIn = false;
       _isTeacher = false;
@@ -519,6 +540,7 @@ class _RootGateState extends State<RootGate> {
       return TeacherDashboardScreen(
         isDarkMode: widget.isDarkMode,
         fontScale: widget.fontScale,
+        onLogout: _onLogout,
       );
     }
 
