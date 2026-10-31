@@ -42,6 +42,12 @@ class _EvaluationTabWidgetState extends State<EvaluationTabWidget> {
     _loadEvaluationData();
   }
 
+  @override
+  void didUpdateWidget(covariant EvaluationTabWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _loadEvaluationData();
+  }
+
   Future<void> _loadEvaluationData() async {
     final prefs = await SharedPreferences.getInstance();
     Map<String, int> scores = {};

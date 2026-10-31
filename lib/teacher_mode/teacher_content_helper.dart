@@ -738,6 +738,7 @@ Graduation Requirements:
       'desc_en': descEn ?? desc,
       'videoUrl': videoUrl,
       'questions': questions,
+      'updatedAt': DateTime.now().toIso8601String(),
       'createdAt':
       '${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
     };
@@ -746,6 +747,7 @@ Graduation Requirements:
 
     final prefs = await SharedPreferences.getInstance();
     final list = await getMateriList();
+    list.removeWhere((item) => item['id'] == id);
     list.add(newMateri);
     await prefs.setString(_materiKey, _safeJsonEncode(list));
   }
@@ -771,6 +773,7 @@ Graduation Requirements:
       'desc_en': descEn ?? desc,
       'videoUrl': videoUrl,
       'questions': questions,
+      'updatedAt': DateTime.now().toIso8601String(),
     };
 
     await FirebaseService.saveOrUpdateMateri(updatedMateri);

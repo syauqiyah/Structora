@@ -134,8 +134,17 @@ class FirebaseService {
       if (snapshot.docs.isNotEmpty) {
         final List<Map<String, dynamic>> list = snapshot.docs.map((doc) {
           final data = doc.data() as Map<String, dynamic>;
-          data['id'] = doc.id;
-          return data;
+          final cleanData = Map<String, dynamic>.from(data);
+          cleanData['id'] = doc.id;
+          cleanData.forEach((key, value) {
+            if (value is Timestamp) {
+              cleanData[key] = value.toDate().toIso8601String();
+            } else if (value != null && (value is FieldValue || value.runtimeType.toString().contains('FieldValue'))) {
+              cleanData[key] = DateTime.now().toIso8601String();
+            }
+          });
+          return cleanData;
+
         }).toList();
 
         const orderMap = {
@@ -154,7 +163,14 @@ class FirebaseService {
         });
 
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('custom_teacher_materi_v10', jsonEncode(list));
+        await prefs.setString(
+          'custom_teacher_materi_v10',
+          jsonEncode(list, toEncodable: (nonEncodable) {
+            if (nonEncodable is Timestamp) return nonEncodable.toDate().toIso8601String();
+            if (nonEncodable is DateTime) return nonEncodable.toIso8601String();
+            return nonEncodable.toString();
+          }),
+        );
 
         return list;
       }
@@ -170,7 +186,7 @@ class FirebaseService {
       final String id = materiData['id'] ?? 'mat_${DateTime.now().millisecondsSinceEpoch}';
       final Map<String, dynamic> firestoreData = Map<String, dynamic>.from(materiData);
       firestoreData['id'] = id;
-      firestoreData['updatedAt'] = FieldValue.serverTimestamp();
+      firestoreData['updatedAt'] = DateTime.now().toIso8601String();
 
       await _materiRef.doc(id).set(firestoreData, SetOptions(merge: true)).timeout(const Duration(milliseconds: 3000));
       debugPrint('Materi $id berhasil disimpan di Firestore.');

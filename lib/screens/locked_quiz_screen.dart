@@ -311,18 +311,23 @@ class _LockedQuizScreenState extends State<LockedQuizScreen>
     final int a3Score = prefs.getInt('score_queue') ?? 0;
     final int a4Score = prefs.getInt('score_searching_sorting') ?? 0;
 
-    final bool isCompleted = (widget.quizType == 'posttest') || prefs.getBool('isPostTestCompleted') == true;
+    final bool hasPre = prefs.getBool('isPreTestCompleted') == true || widget.quizType == 'pretest' || prefs.containsKey('preTestScore');
+    final bool hasPost = prefs.getBool('isPostTestCompleted') == true || widget.quizType == 'posttest' || prefs.containsKey('postTestScore');
+    final bool hasA1 = widget.quizType == 'asesmen_linkedlist' || prefs.containsKey('score_linkedlist');
+    final bool hasA2 = widget.quizType == 'asesmen_stack' || prefs.containsKey('score_stack');
+    final bool hasA3 = widget.quizType == 'asesmen_queue' || prefs.containsKey('score_queue');
+    final bool hasA4 = widget.quizType == 'asesmen_searching_sorting' || prefs.containsKey('score_searching_sorting');
 
     await TeacherDataHelper.recordStudentProgress(
       name: studentName,
       email: studentEmail,
-      preTestScore: preScore > 0 || prefs.getBool('isPreTestCompleted') == true ? '$preScore' : '-',
-      assessment1: a1Score > 0 ? '$a1Score' : '-',
-      assessment2: a2Score > 0 ? '$a2Score' : '-',
-      assessment3: a3Score > 0 ? '$a3Score' : '-',
-      assessment4: a4Score > 0 ? '$a4Score' : '-',
-      postTestScore: postScore > 0 || isCompleted ? '$postScore' : '-',
-      status: isCompleted ? (postScore >= 80 ? 'Tuntas' : 'Belum Ujian') : 'Belum Ujian',
+      preTestScore: hasPre ? '$preScore' : '-',
+      assessment1: hasA1 ? '$a1Score' : '-',
+      assessment2: hasA2 ? '$a2Score' : '-',
+      assessment3: hasA3 ? '$a3Score' : '-',
+      assessment4: hasA4 ? '$a4Score' : '-',
+      postTestScore: hasPost ? '$postScore' : '-',
+      status: hasPost ? (postScore >= 80 ? 'Tuntas' : 'Belum Ujian') : 'Belum Ujian',
     );
 
     NotificationService.syncStudyReminder(studentName: studentName);
