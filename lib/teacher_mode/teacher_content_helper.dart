@@ -747,7 +747,7 @@ Graduation Requirements:
     final prefs = await SharedPreferences.getInstance();
     final list = await getMateriList();
     list.add(newMateri);
-    await prefs.setString(_materiKey, jsonEncode(list));
+    await prefs.setString(_materiKey, _safeJsonEncode(list));
   }
 
   static Future<void> updateMateri({
@@ -788,7 +788,7 @@ Graduation Requirements:
       if (descEn != null) list[index]['desc_en'] = descEn;
       list[index]['videoUrl'] = videoUrl;
       list[index]['questions'] = questions;
-      await prefs.setString(_materiKey, jsonEncode(list));
+      await prefs.setString(_materiKey, _safeJsonEncode(list));
     }
   }
 
@@ -798,7 +798,16 @@ Graduation Requirements:
     final prefs = await SharedPreferences.getInstance();
     final list = await getMateriList();
     list.removeWhere((item) => item['id'] == id);
-    await prefs.setString(_materiKey, jsonEncode(list));
+    await prefs.setString(_materiKey, _safeJsonEncode(list));
+  }
+
+  static String _safeJsonEncode(List list) {
+    return jsonEncode(list, toEncodable: (nonEncodable) {
+      if (nonEncodable is DateTime) {
+        return nonEncodable.toIso8601String();
+      }
+      return nonEncodable.toString();
+    });
   }
 
   static Future<List<dynamic>?> getQuestionsForModule(String moduleId) async {

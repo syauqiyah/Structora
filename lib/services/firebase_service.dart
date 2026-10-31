@@ -168,10 +168,11 @@ class FirebaseService {
   static Future<void> saveOrUpdateMateri(Map<String, dynamic> materiData) async {
     try {
       final String id = materiData['id'] ?? 'mat_${DateTime.now().millisecondsSinceEpoch}';
-      materiData['id'] = id;
-      materiData['updatedAt'] = FieldValue.serverTimestamp();
+      final Map<String, dynamic> firestoreData = Map<String, dynamic>.from(materiData);
+      firestoreData['id'] = id;
+      firestoreData['updatedAt'] = FieldValue.serverTimestamp();
 
-      await _materiRef.doc(id).set(materiData, SetOptions(merge: true)).timeout(const Duration(milliseconds: 3000));
+      await _materiRef.doc(id).set(firestoreData, SetOptions(merge: true)).timeout(const Duration(milliseconds: 3000));
       debugPrint('Materi $id berhasil disimpan di Firestore.');
     } catch (e) {
       debugPrint('Error saveOrUpdateMateri Firestore: $e');
