@@ -1,11 +1,34 @@
 # 📘 Structora — Interactive Data Structure Learning & Evaluation App
 
-[![Flutter](https://img.shields.io/badge/Flutter-3.47.2-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
-[![Dart](https://img.shields.io/badge/Dart-3.13.2-0175C2?logo=dart&logoColor=white)](https://dart.dev)
-[![Firebase](https://img.shields.io/badge/Firebase-Firestore%20%26%20Auth-FFCA28?logo=firebase&logoColor=black)](https://firebase.google.com)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+<p align="center">
+  <a href="https://github.com/syauqiyah/Structora/releases/download/v1.0.0/app-release.apk">
+    <img src="https://img.shields.io/badge/📥_Download-Structora_APK_v1.0.0-0284C7?style=for-the-badge&logo=android&logoColor=white" height="45" alt="Download Structora APK">
+  </a>
+  <a href="https://github.com/syauqiyah/Structora/releases">
+    <img src="https://img.shields.io/badge/📦_GitHub-Releases-22C55E?style=for-the-badge&logo=github&logoColor=white" height="45" alt="GitHub Releases">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.47.2-02569B?logo=flutter&logoColor=white" alt="Flutter"></a>
+  <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-3.13.2-0175C2?logo=dart&logoColor=white" alt="Dart"></a>
+  <a href="https://firebase.google.com"><img src="https://img.shields.io/badge/Firebase-Firestore%20%26%20Auth-FFCA28?logo=firebase&logoColor=black" alt="Firebase"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"></a>
+</p>
+
+---
 
 **Structora** adalah aplikasi pembelajaran dan evaluasi interaktif berbasis mobile dan web yang dirancang khusus untuk mempermudah pemahaman dasar-dasar **Struktur Data** (Linked List, Stack, Queue, Searching & Sorting). Aplikasi ini dilengkapi dengan sistem dual-role (Siswa & Guru), Simulasi 3D Interaktif, Portal LMS Guru, Ujian Terkunci Anti-Kecurangan, Fitur Otomatis Dwibahasa (Indonesia ⇄ Inggris), serta Integrasi Cloud Realtime menggunakan **Google Cloud Firestore** dan **Firebase Authentication**.
+
+---
+
+## 📥 Download Aplikasi (Installer APK)
+
+Klik tombol di bawah ini untuk mengunduh installer APK rilis terbaru secara langsung:
+
+| File Installer | Versi | Status | Tautan Unduh |
+| :--- | :--- | :--- | :--- |
+| **Structora Android App** | `v1.0.0` | 🟢 Rilis Stabil | [📥 **Download app-release.apk**](https://github.com/syauqiyah/Structora/releases/download/v1.0.0/app-release.apk) |
 
 ---
 
@@ -91,8 +114,8 @@ Aplikasi terhubung ke Firebase Project `structo-b3429` dengan 3 koleksi utama:
 
 1. **Clone Repositori**:
    ```bash
-   git clone https://github.com/USERNAME_GITHUB/NAMA_REPO.git
-   cd NAMA_REPO
+   git clone https://github.com/syauqiyah/Structora.git
+   cd Structora
    ```
 
 2. **Install Dependensi**:
