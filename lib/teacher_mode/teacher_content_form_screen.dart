@@ -462,11 +462,52 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
   Future<void> _handleSave() async {
     final bool isEn =
         _currentLanguage == 'en' || LanguageController.instance.isEnglish;
-    if (!_formKey.currentState!.validate()) return;
 
-    final String modulName = _modulCtrl.text.trim();
-    final String titleName = _titleCtrl.text.trim();
-    final String descContent = _descCtrl.text.trim();
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isEn
+              ? 'Please fill in all required fields marked in red.'
+              : 'Harap lengkapi semua kolom form yang bertanda merah.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    String modulName = _modulCtrl.text.trim();
+    String titleName = _titleCtrl.text.trim();
+    String descContent = _descCtrl.text.trim();
+
+    if (titleName.isEmpty) {
+      titleName = _isExamOnly
+          ? (_modulCtrl.text.isNotEmpty ? 'Ujian ${_modulCtrl.text}' : 'Paket Soal Ujian')
+          : 'Materi Pertemuan';
+    }
+
+    if (!_isExamOnly && descContent.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isEn
+              ? 'Material description content cannot be empty!'
+              : 'Rangkuman uraian materi tidak boleh kosong!'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (_questionsList.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isEn
+              ? 'Question package cannot be empty! Click "Quick Import" to add questions.'
+              : 'Paket butir soal tidak boleh kosong! Klik "Quick Import Soal" untuk menambah soal.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
 
     final String modulIndo = isEn ? (widget.existingMateri?['modul'] ?? modulName) : modulName;
     final String modulEng = isEn ? modulName : (widget.existingMateri?['modul_en'] ?? AppText.auto(modulName));
@@ -477,64 +518,62 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
     final String descIndo = isEn ? (widget.existingMateri?['desc'] ?? descContent) : descContent;
     final String descEng = isEn ? descContent : (widget.existingMateri?['desc_en'] ?? AppText.auto(descContent));
 
-    if (_questionsList.isEmpty) {
+    try {
+      if (_isEdit) {
+        await TeacherContentHelper.updateMateri(
+          id: widget.existingMateri!['id'],
+          title: titleIndo,
+          titleEn: titleEng,
+          modul: modulIndo,
+          modulEn: modulEng,
+          desc: descIndo,
+          descEn: descEng,
+          videoUrl: _videoCtrl.text.trim(),
+          questions: _questionsList,
+        );
+      } else {
+        await TeacherContentHelper.saveMateri(
+          title: titleIndo,
+          titleEn: titleEng,
+          modul: modulIndo,
+          modulEn: modulEng,
+          desc: descIndo,
+          descEn: descEng,
+          videoUrl: _videoCtrl.text.trim(),
+          questions: _questionsList,
+        );
+      }
+
+      if (!mounted) return;
+      Navigator.pop(context, true);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(isEn
-              ? 'Question package cannot be empty!'
-              : 'Paket butir soal tidak boleh kosong!'),
+          content: Text(
+            isEn
+                ? (_isExamOnly
+                ? 'Exam question package updated successfully!'
+                : (_isEdit
+                ? 'Material & assessment updated successfully!'
+                : '$modulName published successfully!'))
+                : (_isExamOnly
+                ? 'Paket butir soal berhasil diperbarui!'
+                : (_isEdit
+                ? 'Materi & paket soal asesmen berhasil diperbarui!'
+                : '$modulName berhasil ditambahkan dan dipublikasikan!')),
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isEn ? 'Failed to save: $e' : 'Gagal menyimpan: $e'),
           backgroundColor: Colors.redAccent,
         ),
       );
-      return;
     }
-
-    if (_isEdit) {
-      await TeacherContentHelper.updateMateri(
-        id: widget.existingMateri!['id'],
-        title: titleIndo,
-        titleEn: titleEng,
-        modul: modulIndo,
-        modulEn: modulEng,
-        desc: descIndo,
-        descEn: descEng,
-        videoUrl: _videoCtrl.text.trim(),
-        questions: _questionsList,
-      );
-    } else {
-      await TeacherContentHelper.saveMateri(
-        title: titleIndo,
-        titleEn: titleEng,
-        modul: modulIndo,
-        modulEn: modulEng,
-        desc: descIndo,
-        descEn: descEng,
-        videoUrl: _videoCtrl.text.trim(),
-        questions: _questionsList,
-      );
-    }
-
-    if (!mounted) return;
-    Navigator.pop(context, true);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          isEn
-              ? (_isExamOnly
-              ? 'Exam question package ${_titleCtrl.text} updated successfully!'
-              : (_isEdit
-              ? 'Material & assessment updated successfully!'
-              : '$modulName published successfully!'))
-              : (_isExamOnly
-              ? 'Paket butir soal ${_titleCtrl.text} berhasil diperbarui!'
-              : (_isEdit
-              ? 'Materi & paket soal asesmen berhasil diperbarui!'
-              : '$modulName berhasil ditambahkan dan dipublikasikan!')),
-        ),
-        backgroundColor: Colors.green,
-      ),
-    );
   }
 
   @override
@@ -787,57 +826,58 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.quiz_rounded,
-                                color: Colors.greenAccent, size: 20),
-                            const SizedBox(width: 8),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _isExamOnly
-                                      ? (isEn
-                                      ? '2. Exam Question Package'
-                                      : '2. Paket Butir Soal Ujian')
-                                      : (isEn
-                                      ? '3. Module Assessment Package'
-                                      : '3. Paket Asesmen Ujian Modul'),
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.greenAccent,
-                                  ),
+                        const Icon(Icons.quiz_rounded,
+                            color: Colors.greenAccent, size: 22),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _isExamOnly
+                                    ? (isEn
+                                    ? '2. Exam Question Package'
+                                    : '2. Paket Butir Soal Ujian')
+                                    : (isEn
+                                    ? '3. Module Assessment Package'
+                                    : '3. Paket Asesmen Ujian Modul'),
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.greenAccent,
                                 ),
-                                Text(
-                                  isEn
-                                      ? 'Total ${_questionsList.length} questions installed'
-                                      : 'Total ${_questionsList.length} butir soal terpasang',
-                                  style: TextStyle(
-                                      fontSize: 11, color: subTextColor),
-                                ),
-                              ],
-                            ),
-                          ],
+                              ),
+                              Text(
+                                isEn
+                                    ? 'Total ${_questionsList.length} questions installed'
+                                    : 'Total ${_questionsList.length} butir soal terpasang',
+                                style: TextStyle(
+                                    fontSize: 10.5, color: subTextColor),
+                              ),
+                            ],
+                          ),
                         ),
+                        const SizedBox(width: 6),
                         ElevatedButton.icon(
                           onPressed: _showQuickImportDialog,
                           icon: const Icon(Icons.flash_on_rounded,
-                              size: 16, color: Colors.black),
+                              size: 14, color: Colors.black),
                           label: Text(
                             isEn ? 'Quick Import' : 'Quick Import Soal',
                             style: const TextStyle(
                               color: Colors.black,
                               fontWeight: FontWeight.bold,
-                              fontSize: 12,
+                              fontSize: 11,
                             ),
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF00F0FF),
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 8),
+                                horizontal: 10, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
                         ),
                       ],
@@ -1045,6 +1085,51 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardBg,
+          border: Border(top: BorderSide(color: borderColor)),
+        ),
+        child: SafeArea(
+          child: SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: _handleSave,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accentColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: Icon(
+                _isEdit ? Icons.save_rounded : Icons.cloud_upload_rounded,
+                color: Colors.black,
+                size: 20,
+              ),
+              label: Text(
+                isEn
+                    ? (_isExamOnly
+                    ? 'SAVE EVALUATION QUESTIONS'
+                    : (_isEdit
+                    ? 'SAVE CHANGES'
+                    : 'PUBLISH THIS MEETING'))
+                    : (_isExamOnly
+                    ? 'SIMPAN BANK SOAL EVALUASI'
+                    : (_isEdit
+                    ? 'SIMPAN PERUBAHAN MATERI & ASESMEN'
+                    : 'PUBLIKASIKAN PERTEMUAN INI')),
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13.5,
+                ),
+              ),
+            ),
           ),
         ),
       ),
