@@ -1,0 +1,1844 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DS Visualizer 3D Pro</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            overflow: hidden;
+        }
+        .font-mono-code {
+            font-family: 'Fira Code', monospace;
+        }
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glass-button {
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            transition: all 0.15s ease;
+        }
+        .glass-button:active:not(:disabled) {
+            transform: scale(0.96);
+        }
+        .glass-button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        canvas {
+            display: block;
+            outline: none;
+            touch-action: none;
+        }
+        .scrollable-content {
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            touch-action: pan-y !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col">
+
+<!-- Area Atas: 3D Canvas (50% Tinggi Layar) -->
+<div id="canvas-container" class="relative w-full h-[50%] shrink-0">
+
+    <!-- Status Operasi 3D Overlay -->
+    <div class="absolute top-3 left-3 z-10 glass-panel px-3 py-1.5 rounded-xl max-w-[240px] pointer-events-none border-l-4 border-l-indigo-500 shadow-xl">
+        <div class="text-[9px] font-extrabold tracking-wider text-indigo-400 uppercase flex items-center space-x-1.5" id="status-title">
+            <i class="fa-solid fa-circle-dot animate-pulse"></i>
+            <span>STACK (TUMPUKAN)</span>
+        </div>
+        <div class="text-[10.5px] font-medium text-slate-200 leading-tight mt-0.5" id="status-message">Siap melakukan simulasi Stack.</div>
+    </div>
+
+    <!-- Tombol Suara & Reset Kamera -->
+    <div class="absolute top-3 right-3 z-10 flex space-x-1.5">
+        <button id="sound-btn" onclick="toggleSound()" class="w-8 h-8 rounded-lg glass-button flex items-center justify-center text-slate-300 shadow-lg">
+            <i id="sound-icon" class="fa-solid fa-volume-high text-xs"></i>
+        </button>
+        <button onclick="resetCamera()" class="w-8 h-8 rounded-lg glass-button flex items-center justify-center text-slate-300 shadow-lg">
+            <i class="fa-solid fa-video text-xs"></i>
+        </button>
+    </div>
+
+    <!-- Notifikasi Toast -->
+    <div id="toast" class="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 glass-panel px-3.5 py-1 rounded-full text-[11px] font-bold text-white shadow-2xl opacity-0 transition-opacity duration-300 pointer-events-none flex items-center space-x-1.5 border border-slate-700">
+        <i class="fa-solid fa-circle-info text-indigo-400 text-xs"></i>
+        <span id="toast-msg">Notifikasi</span>
+    </div>
+</div>
+
+<!-- Area Bawah: Kontrol Simulasi & Penjelasan Teori (50% Tinggi Layar) -->
+<div class="flex-1 w-full glass-panel border-t border-slate-800 flex flex-col overflow-hidden">
+
+    <!-- Bar Kontrol Tombol Interaktif -->
+    <div class="px-4 py-2 border-b border-slate-800/80 shrink-0">
+        <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center space-x-1">
+            <i class="fa-solid fa-sliders text-indigo-400"></i>
+            <span id="lbl-ctrl-header">KONTROL SIMULASI INTERAKTIF</span>
+        </div>
+
+        <!-- Stack Controls -->
+        <div id="controls-stack" class="module-controls">
+            <div class="grid grid-cols-4 gap-1.5">
+                <button onclick="stackPush()" class="glass-button py-1.5 rounded-lg text-xs font-semibold text-emerald-400 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-plus text-[10px]"></i>
+                    <span>Push</span>
+                </button>
+                <button onclick="stackPop()" class="glass-button py-1.5 rounded-lg text-xs font-semibold text-rose-400 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-minus text-[10px]"></i>
+                    <span>Pop</span>
+                </button>
+                <button onclick="stackPeek()" class="glass-button py-1.5 rounded-lg text-xs font-semibold text-amber-400 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-eye text-[10px]"></i>
+                    <span>Peek</span>
+                </button>
+                <button onclick="stackClear()" class="glass-button py-1.5 rounded-lg text-xs font-semibold text-slate-400 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-rotate-left text-[10px]"></i>
+                    <span id="btn-stack-reset">Reset</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Queue Controls -->
+        <div id="controls-queue" class="module-controls hidden">
+            <div class="grid grid-cols-4 gap-1.5">
+                <button onclick="queueEnqueue()" class="glass-button py-1.5 rounded-lg text-xs font-semibold text-emerald-400 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-user-plus text-[10px]"></i>
+                    <span>Enqueue</span>
+                </button>
+                <button onclick="queueDequeue()" class="glass-button py-1.5 rounded-lg text-xs font-semibold text-rose-400 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-user-check text-[10px]"></i>
+                    <span>Dequeue</span>
+                </button>
+                <button onclick="queuePeekFront()" class="glass-button py-1.5 rounded-lg text-xs font-semibold text-amber-400 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-eye text-[10px]"></i>
+                    <span>Front</span>
+                </button>
+                <button onclick="queueClear()" class="glass-button py-1.5 rounded-lg text-xs font-semibold text-slate-400 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-rotate-left text-[10px]"></i>
+                    <span id="btn-queue-reset">Reset</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Linked List Controls -->
+        <div id="controls-linkedlist" class="module-controls hidden space-y-1.5">
+            <div class="grid grid-cols-4 gap-1.5">
+                <button onclick="llInsertHead()" class="glass-button py-1.5 rounded-lg text-[11px] font-semibold text-emerald-400 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-arrow-left text-[9px]"></i>
+                    <span id="btn-ll-inshead">+Depan</span>
+                </button>
+                <button onclick="llInsertTail()" class="glass-button py-1.5 rounded-lg text-[11px] font-semibold text-emerald-400 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-arrow-right text-[9px]"></i>
+                    <span id="btn-ll-instail">+Akhir</span>
+                </button>
+                <button onclick="llDeleteHead()" class="glass-button py-1.5 rounded-lg text-[11px] font-semibold text-rose-400 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-xmark text-[9px]"></i>
+                    <span id="btn-ll-delhead">-Depan</span>
+                </button>
+                <button onclick="llDeleteTail()" class="glass-button py-1.5 rounded-lg text-[11px] font-semibold text-rose-400 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-xmark text-[9px]"></i>
+                    <span id="btn-ll-deltail">-Akhir</span>
+                </button>
+            </div>
+            <div class="flex space-x-1.5">
+                <input type="number" id="ll-search-val" placeholder="Nilai (10-99)" min="10" max="99" class="w-1/2 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500">
+                <button onclick="llSearch()" class="w-1/2 glass-button py-1 px-2 rounded-lg text-xs font-semibold text-cyan-400 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-magnifying-glass text-[10px]"></i>
+                    <span id="btn-ll-search">Cari Gerbong</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Sort & Search Controls -->
+        <div id="controls-sortsearch" class="module-controls hidden space-y-1.5">
+            <div class="flex space-x-1.5">
+                <select id="algo-select" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs font-semibold text-white focus:outline-none focus:border-indigo-500">
+                    <optgroup id="opt-grp-sort" label="Pengurutan (Sorting)">
+                        <option value="bubble" id="opt-bubble">1. Bubble Sort (Gelembung)</option>
+                        <option value="selection" id="opt-selection">2. Selection Sort (Seleksi Min)</option>
+                    </optgroup>
+                    <optgroup id="opt-grp-search" label="Pencarian (Searching)">
+                        <option value="linear" id="opt-linear">3. Linear Search (Sekuensial)</option>
+                        <option value="binary" id="opt-binary">4. Binary Search (Bagi Dua)</option>
+                    </optgroup>
+                </select>
+                <input type="number" id="search-target" placeholder="Target" min="10" max="99" value="45" class="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 hidden font-mono-code font-bold">
+            </div>
+            <div class="grid grid-cols-2 gap-1.5">
+                <button id="btn-run-sort" onclick="runSortSearch()" class="glass-button py-1.5 rounded-lg text-xs font-bold text-indigo-400 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-play text-[10px]"></i>
+                    <span id="btn-lbl-run">Jalankan Simulasi</span>
+                </button>
+                <button onclick="shuffleBooks()" class="glass-button py-1.5 rounded-lg text-xs font-bold text-amber-400 flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-shuffle text-[10px]"></i>
+                    <span id="btn-lbl-shuffle">Acak Buku</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Area Penjelasan Teori & Analogi Lengkap (Scrollable) -->
+    <div class="flex-1 px-4 py-3 scrollable-content space-y-3 pb-16">
+        <h2 class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center space-x-1.5">
+            <i class="fa-solid fa-book-open text-amber-400"></i>
+            <span id="lbl-theory-header">Analogi Dunia Nyata & Teori Komprehensif</span>
+        </h2>
+        <div id="theory-box" class="text-xs leading-relaxed text-slate-300 space-y-3">
+            <!-- Diinjeksi otomatis oleh JavaScript -->
+        </div>
+    </div>
+</div>
+
+<!-- MAIN SIMULATION SCRIPT -->
+<script>
+    let scene, camera, renderer, controls;
+    let currentTab = 'stack';
+    let isAnimating = false;
+    let soundEnabled = true;
+    let currentLang = 'id'; // 'id' atau 'en'
+
+    let stackGroup, queueGroup, linkedListGroup, sortSearchGroup;
+
+    const PALETTE = [
+        0x6366f1, 0x10b981, 0xf59e0b, 0xef4444, 0x8b5cf6,
+        0x06b6d4, 0xec4899, 0x3b82f6, 0x14b8a6, 0xf97316
+    ];
+
+    let audioCtx;
+    function getAudioContext() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        return audioCtx;
+    }
+
+    function playSound(type) {
+        if (!soundEnabled) return;
+        try {
+            const ctx = getAudioContext();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            const now = ctx.currentTime;
+            if (type === 'push' || type === 'enqueue') {
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.exponentialRampToValueAtTime(440, now + 0.15);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (type === 'pop' || type === 'dequeue' || type === 'delete') {
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.exponentialRampToValueAtTime(180, now + 0.15);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (type === 'beep') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1200, now);
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            } else if (type === 'step' || type === 'compare') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(320, now);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            } else if (type === 'success') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(660, now + 0.1);
+                osc.frequency.setValueAtTime(880, now + 0.2);
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+                osc.start(now);
+                osc.stop(now + 0.35);
+            } else if (type === 'whistle') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.linearRampToValueAtTime(800, now + 0.15);
+                gain.gain.setValueAtTime(0.12, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+        } catch (e) {
+            console.log(e);
+        }
+    }
+
+    function toggleSound() {
+        soundEnabled = !soundEnabled;
+        const icon = document.getElementById('sound-icon');
+        const isEn = (currentLang === 'en');
+        if (soundEnabled) {
+            icon.className = 'fa-solid fa-volume-high text-xs';
+            showToast(isEn ? 'Sound enabled' : 'Suara diaktifkan');
+        } else {
+            icon.className = 'fa-solid fa-volume-xmark text-rose-400 text-xs';
+            showToast(isEn ? 'Sound muted' : 'Suara dimatikan');
+        }
+    }
+
+    function showToast(msg) {
+        const toast = document.getElementById('toast');
+        document.getElementById('toast-msg').innerText = msg;
+        toast.classList.remove('opacity-0');
+        toast.classList.add('opacity-100');
+        setTimeout(() => {
+            toast.classList.remove('opacity-100');
+            toast.classList.add('opacity-0');
+        }, 2000);
+    }
+
+    function setStatus(title, message) {
+        document.getElementById('status-title').innerHTML = `<i class="fa-solid fa-circle-dot animate-pulse"></i> <span>${title}</span>`;
+        document.getElementById('status-message').innerText = message;
+    }
+
+    // FUNGSI GANTI BAHASA DARI FLUTTER
+    window.setLanguage = function(lang) {
+        currentLang = lang;
+        const isEn = (lang === 'en');
+
+        // Update UI Labels
+        document.getElementById('lbl-ctrl-header').innerText = isEn ? 'INTERACTIVE SIMULATION CONTROLS' : 'KONTROL SIMULASI INTERAKTIF';
+        document.getElementById('lbl-theory-header').innerText = isEn ? 'Real-World Analogy & Comprehensive Theory' : 'Analogi Dunia Nyata & Teori Komprehensif';
+
+        document.getElementById('btn-stack-reset').innerText = isEn ? 'Reset' : 'Reset';
+        document.getElementById('btn-queue-reset').innerText = isEn ? 'Reset' : 'Reset';
+
+        document.getElementById('btn-ll-inshead').innerText = isEn ? '+Front' : '+Depan';
+        document.getElementById('btn-ll-instail').innerText = isEn ? '+Tail' : '+Akhir';
+        document.getElementById('btn-ll-delhead').innerText = isEn ? '-Front' : '-Depan';
+        document.getElementById('btn-ll-deltail').innerText = isEn ? '-Tail' : '-Akhir';
+        document.getElementById('btn-ll-search').innerText = isEn ? 'Find Node' : 'Cari Gerbong';
+        document.getElementById('ll-search-val').placeholder = isEn ? 'Value (10-99)' : 'Nilai (10-99)';
+
+        document.getElementById('opt-grp-sort').label = isEn ? 'Sorting' : 'Pengurutan (Sorting)';
+        document.getElementById('opt-grp-search').label = isEn ? 'Searching' : 'Pencarian (Searching)';
+        document.getElementById('opt-bubble').innerText = isEn ? '1. Bubble Sort' : '1. Bubble Sort (Gelembung)';
+        document.getElementById('opt-selection').innerText = isEn ? '2. Selection Sort' : '2. Selection Sort (Seleksi Min)';
+        document.getElementById('opt-linear').innerText = isEn ? '3. Linear Search' : '3. Linear Search (Sekuensial)';
+        document.getElementById('opt-binary').innerText = isEn ? '4. Binary Search' : '4. Binary Search (Bagi Dua)';
+
+        document.getElementById('btn-lbl-run').innerText = isEn ? 'Run Simulation' : 'Jalankan Simulasi';
+        document.getElementById('btn-lbl-shuffle').innerText = isEn ? 'Shuffle Books' : 'Acak Buku';
+
+        updateTheory(currentTab);
+    };
+
+    function createTextTexture(text, bgColor = '#1e293b', textColor = '#ffffff') {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+
+        ctx.fillStyle = bgColor;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(0, 0, canvas.width, canvas.height, 16);
+        } else {
+            ctx.rect(0, 0, canvas.width, canvas.height);
+        }
+        ctx.fill();
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 6;
+        ctx.stroke();
+
+        ctx.fillStyle = textColor;
+        ctx.font = 'bold 54px Plus Jakarta Sans, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+        return new THREE.CanvasTexture(canvas);
+    }
+
+    function initScene() {
+        const container = document.getElementById('canvas-container');
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x090d16);
+
+        camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+        camera.position.set(0, 8, 18);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.02;
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(15, 25, 15);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        const floorGeo = new THREE.PlaneGeometry(80, 80);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        const grid = new THREE.GridHelper(80, 40, 0x334155, 0x1e293b);
+        grid.position.y = 0.01;
+        scene.add(grid);
+
+        stackGroup = new THREE.Group();
+        queueGroup = new THREE.Group();
+        linkedListGroup = new THREE.Group();
+        sortSearchGroup = new THREE.Group();
+
+        scene.add(stackGroup);
+        scene.add(queueGroup);
+        scene.add(linkedListGroup);
+        scene.add(sortSearchGroup);
+
+        window.addEventListener('resize', onWindowResize);
+    }
+
+    function onWindowResize() {
+        const container = document.getElementById('canvas-container');
+        if (!container) return;
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+    }
+
+    function resetCamera() {
+        if (currentTab === 'stack') {
+            camera.position.set(0, 7, 16);
+            controls.target.set(0, 3, 0);
+        } else if (currentTab === 'queue') {
+            camera.position.set(3, 8, 18);
+            controls.target.set(3, 1.5, 0);
+        } else if (currentTab === 'linkedlist') {
+            camera.position.set(0, 9, 20);
+            controls.target.set(0, 1.5, 0);
+        } else if (currentTab === 'sortsearch') {
+            camera.position.set(0, 6, 17);
+            controls.target.set(0, 2.5, 0);
+        }
+        controls.update();
+    }
+
+    window.switchTab = function(tabName) {
+        currentTab = tabName;
+
+        stackGroup.visible = (tabName === 'stack');
+        queueGroup.visible = (tabName === 'queue');
+        linkedListGroup.visible = (tabName === 'linkedlist');
+        sortSearchGroup.visible = (tabName === 'sortsearch');
+
+        document.querySelectorAll('.module-controls').forEach(ctrl => ctrl.classList.add('hidden'));
+        const activeCtrl = document.getElementById(`controls-${tabName}`);
+        if (activeCtrl) activeCtrl.classList.remove('hidden');
+
+        resetCamera();
+        updateTheory(tabName);
+    };
+
+    // 1. STACK MODULE
+    let stackItems = [];
+    const MAX_STACK = 6;
+
+    function buildStackScene() {
+        const tableGeo = new THREE.CylinderGeometry(3.5, 3.8, 0.4, 32);
+        const tableMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 });
+        const table = new THREE.Mesh(tableGeo, tableMat);
+        table.position.set(0, 0.2, 0);
+        table.receiveShadow = true;
+        stackGroup.add(table);
+
+        const baseGeo = new THREE.CylinderGeometry(2.2, 2.4, 0.15, 32);
+        const baseMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.3 });
+        const base = new THREE.Mesh(baseGeo, baseMat);
+        base.position.set(0, 0.45, 0);
+        stackGroup.add(base);
+    }
+
+    function createPlateMesh(val, colorHex) {
+        const plateGroup = new THREE.Group();
+
+        const plateGeo = new THREE.CylinderGeometry(1.8, 1.3, 0.35, 32);
+        const plateMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.2 });
+        const plate = new THREE.Mesh(plateGeo, plateMat);
+        plate.castShadow = true;
+        plateGroup.add(plate);
+
+        const rimGeo = new THREE.TorusGeometry(1.75, 0.08, 16, 32);
+        const rimMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+        const rim = new THREE.Mesh(rimGeo, rimMat);
+        rim.rotation.x = Math.PI / 2;
+        rim.position.y = 0.15;
+        plateGroup.add(rim);
+
+        const textTex = createTextTexture(val.toString(), '#1e293b', '#ffffff');
+        const labelGeo = new THREE.PlaneGeometry(1.0, 0.5);
+        const labelMat = new THREE.MeshBasicMaterial({ map: textTex, transparent: true, side: THREE.DoubleSide });
+        const label = new THREE.Mesh(labelGeo, labelMat);
+        label.rotation.x = -Math.PI / 2;
+        label.position.y = 0.19;
+        plateGroup.add(label);
+
+        plateGroup.userData = { value: val };
+        return plateGroup;
+    }
+
+    function stackPush() {
+        const isEn = (currentLang === 'en');
+        if (stackItems.length >= MAX_STACK) {
+            showToast(isEn ? 'Stack Overflow! Plate stack is full.' : 'Stack Overflow! Piring sudah penuh.');
+            return;
+        }
+
+        const val = Math.floor(Math.random() * 89) + 10;
+        const color = PALETTE[stackItems.length % PALETTE.length];
+        const plate = createPlateMesh(val, color);
+
+        const targetY = 0.65 + (stackItems.length * 0.42);
+
+        plate.position.set(0, 10, 0);
+        stackGroup.add(plate);
+        stackItems.push(plate);
+        playSound('push');
+
+        setStatus(
+            isEn ? 'PUSH (ADD TO TOP)' : 'PUSH (TAMBAH DARI ATAS)',
+            isEn ? `Plate element #${val} pushed onto the peak of the stack (TOP).` : `Elemen Piring #${val} dimasukkan ke paling atas tumpukan (TOP).`
+        );
+
+        let currY = 10;
+        function animateDrop() {
+            if (currY > targetY) {
+                currY -= 0.5;
+                if (currY < targetY) currY = targetY;
+                plate.position.y = currY;
+                requestAnimationFrame(animateDrop);
+            }
+        }
+        animateDrop();
+    }
+
+    function stackPop() {
+        const isEn = (currentLang === 'en');
+        if (stackItems.length === 0) {
+            showToast(isEn ? 'Stack Underflow! Plate stack is empty.' : 'Stack Underflow! Tumpukan piring kosong.');
+            return;
+        }
+
+        const popped = stackItems.pop();
+        playSound('pop');
+        setStatus(
+            isEn ? 'POP (REMOVE FROM TOP)' : 'POP (HAPUS DARI ATAS)',
+            isEn ? `Plate element #${popped.userData.value} removed from TOP of stack.` : `Elemen Piring #${popped.userData.value} yang berada di posisi teratas (TOP) dikeluarkan.`
+        );
+
+        let currY = popped.position.y;
+        function animateLift() {
+            if (currY < 10) {
+                currY += 0.5;
+                popped.position.y = currY;
+                requestAnimationFrame(animateLift);
+            } else {
+                stackGroup.remove(popped);
+            }
+        }
+        animateLift();
+    }
+
+    function stackPeek() {
+        const isEn = (currentLang === 'en');
+        if (stackItems.length === 0) {
+            showToast(isEn ? 'Stack is empty!' : 'Stack kosong!');
+            return;
+        }
+        const topItem = stackItems[stackItems.length - 1];
+        playSound('step');
+        setStatus(
+            isEn ? 'PEEK (VIEW TOP)' : 'PEEK (LIHAT ATAS)',
+            isEn ? `The topmost element (TOP) currently holds value #${topItem.userData.value}` : `Elemen teratas (TOP) saat ini bernilai #${topItem.userData.value}`
+        );
+
+        const origY = topItem.position.y;
+        topItem.position.y += 0.5;
+        setTimeout(() => { topItem.position.y = origY; }, 300);
+    }
+
+    function stackClear() {
+        const isEn = (currentLang === 'en');
+        stackItems.forEach(item => stackGroup.remove(item));
+        stackItems = [];
+        setStatus(
+            isEn ? 'STACK (RESET)' : 'STACK (RESET)',
+            isEn ? 'Plate stack has been cleared.' : 'Tumpukan piring telah dikosongkan.'
+        );
+    }
+
+    // 2. QUEUE MODULE
+    let queueItems = [];
+    const MAX_QUEUE = 5;
+    let scannerLightMesh = null;
+
+    function createHumanCharacter(shirtColorHex, numberText = null, isCashier = false) {
+        const human = new THREE.Group();
+        const skinMat = new THREE.MeshStandardMaterial({ color: 0xffdbac, roughness: 0.5 });
+        const shirtMat = new THREE.MeshStandardMaterial({ color: shirtColorHex, roughness: 0.6 });
+        const pantsMat = new THREE.MeshStandardMaterial({ color: isCashier ? 0x0f172a : 0x1e293b, roughness: 0.7 });
+
+        const torsoGeo = new THREE.CylinderGeometry(0.32, 0.28, 0.9, 16);
+        const torso = new THREE.Mesh(torsoGeo, shirtMat);
+        torso.position.y = 1.35;
+        torso.castShadow = true;
+        human.add(torso);
+
+        const headGeo = new THREE.SphereGeometry(0.23, 24, 24);
+        const head = new THREE.Mesh(headGeo, skinMat);
+        head.position.y = 1.9;
+        human.add(head);
+
+        const legGeo = new THREE.CylinderGeometry(0.1, 0.09, 0.85, 12);
+        const legL = new THREE.Mesh(legGeo, pantsMat);
+        legL.position.set(-0.16, 0.45, 0);
+        const legR = new THREE.Mesh(legGeo, pantsMat);
+        legR.position.set(0.16, 0.45, 0);
+        human.add(legL);
+        human.add(legR);
+
+        if (!isCashier && numberText !== null) {
+            const textTex = createTextTexture(numberText.toString(), '#0f172a', '#ffffff');
+            const labelGeo = new THREE.PlaneGeometry(0.7, 0.35);
+            const labelMat = new THREE.MeshBasicMaterial({ map: textTex, transparent: true, side: THREE.DoubleSide });
+            const label = new THREE.Mesh(labelGeo, labelMat);
+            label.position.set(0, 2.35, 0);
+            human.add(label);
+        }
+
+        return human;
+    }
+
+    function buildQueueScene() {
+        const cashierGroup = new THREE.Group();
+
+        const counterGeo = new THREE.BoxGeometry(3.6, 1.05, 1.5);
+        const counterMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4 });
+        const counter = new THREE.Mesh(counterGeo, counterMat);
+        counter.position.set(-2, 0.525, 0);
+        cashierGroup.add(counter);
+
+        const beltGeo = new THREE.BoxGeometry(2.2, 0.04, 0.8);
+        const beltMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 });
+        const belt = new THREE.Mesh(beltGeo, beltMat);
+        belt.position.set(-1.6, 1.07, 0);
+        cashierGroup.add(belt);
+
+        const scanGeo = new THREE.BoxGeometry(0.35, 0.12, 0.35);
+        const scanMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.5 });
+        const scanner = new THREE.Mesh(scanGeo, scanMat);
+        scanner.position.set(-2.7, 1.1, 0);
+        cashierGroup.add(scanner);
+
+        const lightGeo = new THREE.PlaneGeometry(0.35, 0.35);
+        const lightMat = new THREE.MeshBasicMaterial({ color: 0xef4444, side: THREE.DoubleSide });
+        scannerLightMesh = new THREE.Mesh(lightGeo, lightMat);
+        scannerLightMesh.rotation.x = Math.PI / 2;
+        scannerLightMesh.position.set(-2.7, 1.17, 0);
+        scannerLightMesh.visible = false;
+        cashierGroup.add(scannerLightMesh);
+
+        queueGroup.add(cashierGroup);
+
+        const cashierNPC = createHumanCharacter(0x0284c7, null, true);
+        cashierNPC.position.set(-2.8, 0, -1.0);
+        queueGroup.add(cashierNPC);
+    }
+
+    function queueEnqueue() {
+        const isEn = (currentLang === 'en');
+        if (queueItems.length >= MAX_QUEUE) {
+            showToast(isEn ? 'Queue Full! Maximum 5 customers.' : 'Antrean Penuh! Maksimal 5 pembeli.');
+            return;
+        }
+
+        const val = Math.floor(Math.random() * 89) + 10;
+        const color = PALETTE[queueItems.length % PALETTE.length];
+        const customer = createHumanCharacter(color, val, false);
+
+        const targetX = -0.5 + (queueItems.length * 1.8);
+
+        customer.position.set(12, 0, 0.6);
+        customer.rotation.y = -Math.PI / 2;
+
+        queueGroup.add(customer);
+        queueItems.push({ group: customer, value: val });
+
+        playSound('enqueue');
+        setStatus(
+            isEn ? 'ENQUEUE (JOIN QUEUE)' : 'ENQUEUE (MASUK ANTREAN)',
+            isEn ? `Customer #${val} arrives and queues at the REAR end.` : `Pembeli #${val} datang & berbaris di posisi BELAKANG (Rear).`
+        );
+
+        let currX = 12;
+        function animateWalk() {
+            if (currX > targetX) {
+                currX -= 0.3;
+                if (currX < targetX) currX = targetX;
+                customer.position.x = currX;
+                requestAnimationFrame(animateWalk);
+            }
+        }
+        animateWalk();
+    }
+
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    async function queueDequeue() {
+        const isEn = (currentLang === 'en');
+        if (queueItems.length === 0) {
+            showToast(isEn ? 'Queue is empty! No customers.' : 'Antrean Kosong! Tidak ada pembeli.');
+            return;
+        }
+        if (isAnimating) return;
+        isAnimating = true;
+
+        const served = queueItems.shift();
+        const customerGroup = served.group;
+        const val = served.value;
+
+        setStatus(
+            isEn ? 'DEQUEUE (SERVED AT CASHIER)' : 'DEQUEUE (DILAYANI KASIR)',
+            isEn ? `Leading customer #${val} is scanning groceries at the checkout...` : `Pembeli terdepan #${val} sedang memindai belanjaan di Kasir...`
+        );
+
+        let currX = customerGroup.position.x;
+        while (currX > -1.8) {
+            currX -= 0.1;
+            customerGroup.position.x = currX;
+            await sleep(20);
+        }
+
+        if (scannerLightMesh) scannerLightMesh.visible = true;
+        playSound('beep');
+        await sleep(250);
+        if (scannerLightMesh) scannerLightMesh.visible = false;
+        await sleep(150);
+
+        playSound('dequeue');
+        setStatus(
+            isEn ? 'DEQUEUE (COMPLETED)' : 'DEQUEUE (SELESAI)',
+            isEn ? `Customer #${val} finished payment and exits the queue.` : `Pembeli #${val} selesai membayar & meninggalkan antrean.`
+        );
+
+        while (customerGroup.position.x > -4.2) {
+            customerGroup.position.x -= 0.12;
+            await sleep(20);
+        }
+
+        queueGroup.remove(customerGroup);
+
+        queueItems.forEach((item, index) => {
+            const newX = -0.5 + (index * 1.8);
+            let posX = item.group.position.x;
+            function animateAdvance() {
+                if (posX > newX) {
+                    posX -= 0.1;
+                    if (posX < newX) posX = newX;
+                    item.group.position.x = posX;
+                    requestAnimationFrame(animateAdvance);
+                }
+            }
+            animateAdvance();
+        });
+
+        isAnimating = false;
+    }
+
+    function queuePeekFront() {
+        const isEn = (currentLang === 'en');
+        if (queueItems.length === 0) {
+            showToast(isEn ? 'Queue is empty!' : 'Antrean kosong!');
+            return;
+        }
+        const front = queueItems[0];
+        playSound('step');
+        setStatus(
+            isEn ? 'PEEK FRONT (VIEW FRONT)' : 'PEEK FRONT (LIHAT DEPAN)',
+            isEn ? `The front customer at the Cashier (FRONT) is #${front.value}` : `Pembeli terdepan di Kasir (FRONT) adalah #${front.value}`
+        );
+
+        const origY = front.group.position.y;
+        front.group.position.y += 0.4;
+        setTimeout(() => { front.group.position.y = origY; }, 300);
+    }
+
+    function queueClear() {
+        const isEn = (currentLang === 'en');
+        queueItems.forEach(item => queueGroup.remove(item.group));
+        queueItems = [];
+        setStatus(
+            isEn ? 'QUEUE (RESET)' : 'QUEUE (RESET)',
+            isEn ? 'Checkout line has been cleared.' : 'Antrean kasir telah dikosongkan.'
+        );
+    }
+
+    // 3. LINKED LIST MODULE
+    let llNodes = [];
+    const MAX_LL = 5;
+
+    function buildLinkedListScene() {
+        const trackGroup = new THREE.Group();
+
+        const ballastGeo = new THREE.BoxGeometry(26, 0.15, 2.2);
+        const ballastMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.9 });
+        const ballast = new THREE.Mesh(ballastGeo, ballastMat);
+        ballast.position.set(0, 0.075, 0);
+        trackGroup.add(ballast);
+
+        const sleeperGeo = new THREE.BoxGeometry(0.2, 0.1, 2.0);
+        const sleeperMat = new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.7 });
+        for (let x = -12.5; x <= 12.5; x += 0.6) {
+            const sleeper = new THREE.Mesh(sleeperGeo, sleeperMat);
+            sleeper.position.set(x, 0.18, 0);
+            trackGroup.add(sleeper);
+        }
+
+        const railGeo = new THREE.BoxGeometry(26, 0.12, 0.08);
+        const railMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9 });
+        const railL = new THREE.Mesh(railGeo, railMat);
+        railL.position.set(0, 0.26, -0.65);
+        const railR = new THREE.Mesh(railGeo, railMat);
+        railR.position.set(0, 0.26, 0.65);
+        trackGroup.add(railL);
+        trackGroup.add(railR);
+
+        linkedListGroup.add(trackGroup);
+
+        const loco = createLocomotiveMesh();
+        loco.position.set(-10, 0.3, 0);
+        linkedListGroup.add(loco);
+    }
+
+    function createLocomotiveMesh() {
+        const locoGroup = new THREE.Group();
+        const bodyGeo = new THREE.BoxGeometry(3.2, 1.3, 1.45);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3 });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.set(0, 1.1, 0);
+        locoGroup.add(body);
+
+        const textTex = createTextTexture("HEAD", '#d97706', '#ffffff');
+        const labelGeo = new THREE.PlaneGeometry(1.2, 0.45);
+        const labelMat = new THREE.MeshBasicMaterial({ map: textTex, transparent: true, side: THREE.DoubleSide });
+        const label = new THREE.Mesh(labelGeo, labelMat);
+        label.position.set(-0.8, 1.5, 0.76);
+        locoGroup.add(label);
+
+        return locoGroup;
+    }
+
+    function createPassengerCarMesh(val) {
+        const carGroup = new THREE.Group();
+        const carGeo = new THREE.BoxGeometry(2.9, 1.35, 1.45);
+        const color = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+        const carMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.3 });
+        const car = new THREE.Mesh(carGeo, carMat);
+        car.position.y = 1.1;
+        carGroup.add(car);
+
+        const textTex = createTextTexture(`[ ${val} ]`, '#1e293b', '#ffffff');
+        const labelGeo = new THREE.PlaneGeometry(1.1, 0.5);
+        const labelMat = new THREE.MeshBasicMaterial({ map: textTex, transparent: true, side: THREE.DoubleSide });
+        const label = new THREE.Mesh(labelGeo, labelMat);
+        label.position.set(0, 1.1, 0.76);
+        carGroup.add(label);
+
+        carGroup.userData = { value: val };
+        return carGroup;
+    }
+
+    function createPointerConnector() {
+        const arrowGroup = new THREE.Group();
+        const rodGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.1, 12);
+        const rodMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7 });
+        const rod = new THREE.Mesh(rodGeo, rodMat);
+        rod.rotation.z = Math.PI / 2;
+        rod.position.y = 0.9;
+        arrowGroup.add(rod);
+
+        const coneGeo = new THREE.ConeGeometry(0.2, 0.4, 16);
+        const coneMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+        const cone = new THREE.Mesh(coneGeo, coneMat);
+        cone.rotation.z = -Math.PI / 2;
+        cone.position.set(0.5, 0.9, 0);
+        arrowGroup.add(cone);
+
+        return arrowGroup;
+    }
+
+    function rearrangeLLPositions() {
+        const startX = -3.2;
+        llNodes.forEach((node, idx) => {
+            const targetX = startX + (idx * 3.6);
+            node.group.position.x = targetX;
+
+            if (node.nextArrow) {
+                if (idx < llNodes.length - 1) {
+                    node.nextArrow.visible = true;
+                    node.nextArrow.position.set(targetX + 1.8, 0, 0);
+                } else {
+                    node.nextArrow.visible = false;
+                }
+            }
+        });
+    }
+
+    function llInsertHead() {
+        const isEn = (currentLang === 'en');
+        if (llNodes.length >= MAX_LL) {
+            showToast(isEn ? 'Linked List is full!' : 'Linked List Penuh!');
+            return;
+        }
+        const val = Math.floor(Math.random() * 89) + 10;
+        const car = createPassengerCarMesh(val);
+        const arrow = createPointerConnector();
+
+        linkedListGroup.add(car);
+        linkedListGroup.add(arrow);
+
+        llNodes.unshift({ group: car, value: val, nextArrow: arrow });
+        rearrangeLLPositions();
+
+        playSound('whistle');
+        setStatus(
+            isEn ? 'INSERT HEAD' : 'INSERT HEAD',
+            isEn ? `Car [${val}] linked directly behind Locomotive (Head). Head pointer redirected.` : `Gerbong [${val}] disambungkan langsung di belakang Lokomotif (Head). Pointer Head dialihkan.`
+        );
+    }
+
+    function llInsertTail() {
+        const isEn = (currentLang === 'en');
+        if (llNodes.length >= MAX_LL) {
+            showToast(isEn ? 'Linked List is full!' : 'Linked List Penuh!');
+            return;
+        }
+        const val = Math.floor(Math.random() * 89) + 10;
+        const car = createPassengerCarMesh(val);
+        const arrow = createPointerConnector();
+
+        linkedListGroup.add(car);
+        linkedListGroup.add(arrow);
+
+        llNodes.push({ group: car, value: val, nextArrow: arrow });
+        rearrangeLLPositions();
+
+        playSound('whistle');
+        setStatus(
+            isEn ? 'INSERT TAIL' : 'INSERT TAIL',
+            isEn ? `Car [${val}] appended to the very end (Tail). Dynamic memory allocated.` : `Gerbong [${val}] disambungkan ke ujung akhir (Tail). Alokasi memori dinamis bertambah.`
+        );
+    }
+
+    function llDeleteHead() {
+        const isEn = (currentLang === 'en');
+        if (llNodes.length === 0) {
+            showToast(isEn ? 'Linked List is empty!' : 'Linked List Kosong!');
+            return;
+        }
+        const removed = llNodes.shift();
+        linkedListGroup.remove(removed.group);
+        linkedListGroup.remove(removed.nextArrow);
+        rearrangeLLPositions();
+        playSound('delete');
+        setStatus(
+            isEn ? 'DELETE HEAD' : 'DELETE HEAD',
+            isEn ? `Head car [${removed.value}] detached. Head pointer updated to succeeding node.` : `Gerbong Head [${removed.value}] dilepas. Pointer Head menunjuk ke gerbong berikutnya.`
+        );
+    }
+
+    function llDeleteTail() {
+        const isEn = (currentLang === 'en');
+        if (llNodes.length === 0) {
+            showToast(isEn ? 'Linked List is empty!' : 'Linked List Kosong!');
+            return;
+        }
+        const removed = llNodes.pop();
+        linkedListGroup.remove(removed.group);
+        linkedListGroup.remove(removed.nextArrow);
+        rearrangeLLPositions();
+        playSound('delete');
+        setStatus(
+            isEn ? 'DELETE TAIL' : 'DELETE TAIL',
+            isEn ? `Tail car [${removed.value}] unhooked from the rear of the train.` : `Gerbong Tail [${removed.value}] dilepas dari ujung rangkaian.`
+        );
+    }
+
+    function llSearch() {
+        const isEn = (currentLang === 'en');
+        const input = document.getElementById('ll-search-val');
+        const targetVal = parseInt(input.value);
+        if (isNaN(targetVal)) {
+            showToast(isEn ? 'Enter a valid number!' : 'Masukkan angka yang valid!');
+            return;
+        }
+
+        let foundIdx = -1;
+        llNodes.forEach((node, idx) => {
+            if (node.value === targetVal && foundIdx === -1) {
+                foundIdx = idx;
+            }
+        });
+
+        if (foundIdx !== -1) {
+            playSound('success');
+            setStatus(
+                isEn ? 'SEARCH SUCCESS' : 'SEARCH BERHASIL',
+                isEn ? `Traversal successful! Car [${targetVal}] found at Index ${foundIdx}.` : `Traversal berhasil! Gerbong [${targetVal}] ditemukan pada Indeks ke-${foundIdx}.`
+            );
+            const targetCar = llNodes[foundIdx].group;
+            const origY = targetCar.position.y;
+            targetCar.position.y += 0.6;
+            setTimeout(() => { targetCar.position.y = origY; }, 600);
+        } else {
+            showToast(isEn ? `Car [${targetVal}] not found.` : `Gerbong [${targetVal}] tidak ditemukan.`);
+            setStatus(
+                isEn ? 'SEARCH FAILED' : 'SEARCH GAGAL',
+                isEn ? `Traversal complete from Head to Tail. Value ${targetVal} does not exist.` : `Traversal selesai dari Head ke Tail. Nilai ${targetVal} tidak ada.`
+            );
+        }
+    }
+
+    // 4. SORTING & SEARCHING MODULE
+    let books = [];
+    let bookValues = [45, 12, 89, 34, 67, 23, 78, 56];
+    let threeDPointers = {};
+
+    function buildSortSearchScene() {
+        const libraryGroup = new THREE.Group();
+        const shelfWoodMat = new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.6 });
+
+        const shelfGeo = new THREE.BoxGeometry(12.5, 0.35, 3.2);
+        const shelf = new THREE.Mesh(shelfGeo, shelfWoodMat);
+        shelf.position.set(0, 0, 0);
+        libraryGroup.add(shelf);
+
+        sortSearchGroup.add(libraryGroup);
+
+        create3DPointers();
+        createBooks();
+    }
+
+    function create3DPointers() {
+        const pointerLabels = [
+            { name: 'i', color: '#6366f1' },
+            { name: 'j', color: '#06b6d4' },
+            { name: 'min', color: '#ec4899' },
+            { name: 'low', color: '#10b981' },
+            { name: 'mid', color: '#a855f7' },
+            { name: 'high', color: '#ef4444' }
+        ];
+
+        pointerLabels.forEach(p => {
+            const group = new THREE.Group();
+            const textTex = createTextTexture(p.name.toUpperCase(), '#0f172a', p.color);
+            const labelGeo = new THREE.PlaneGeometry(0.7, 0.35);
+            const labelMat = new THREE.MeshBasicMaterial({ map: textTex, transparent: true, side: THREE.DoubleSide });
+            const label = new THREE.Mesh(labelGeo, labelMat);
+            label.position.y = 0.6;
+            group.add(label);
+
+            const coneGeo = new THREE.ConeGeometry(0.2, 0.4, 16);
+            const coneMat = new THREE.MeshBasicMaterial({ color: p.color });
+            const cone = new THREE.Mesh(coneGeo, coneMat);
+            cone.rotation.x = Math.PI;
+            cone.position.y = 0.2;
+            group.add(cone);
+
+            group.visible = false;
+            sortSearchGroup.add(group);
+            threeDPointers[p.name] = group;
+        });
+    }
+
+    function hideAll3DPointers() {
+        Object.values(threeDPointers).forEach(p => p.visible = false);
+    }
+
+    function setPointerPos(name, index, heightOffset = 0.5) {
+        if (!threeDPointers[name] || !books[index]) return;
+        const ptr = threeDPointers[name];
+        const bookX = books[index].group.position.x;
+        const bookH = books[index].height;
+
+        ptr.position.set(bookX, bookH + heightOffset + 0.3, 1.1);
+        ptr.visible = true;
+    }
+
+    function createBooks() {
+        books.forEach(b => sortSearchGroup.remove(b.group));
+        books = [];
+
+        const startX = -4.55;
+        bookValues.forEach((val, idx) => {
+            const group = new THREE.Group();
+            const height = 1.3 + (val / 100) * 2.8;
+
+            const bookGeo = new THREE.BoxGeometry(0.8, height, 2.1);
+            const color = PALETTE[idx % PALETTE.length];
+            const bookMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.3 });
+            const bookMesh = new THREE.Mesh(bookGeo, bookMat);
+            bookMesh.position.y = height / 2 + 0.175;
+            bookMesh.castShadow = true;
+            group.add(bookMesh);
+
+            const textTex = createTextTexture(val.toString(), '#ffffff', '#0f172a');
+            const labelGeo = new THREE.PlaneGeometry(0.65, 0.65);
+            const labelMat = new THREE.MeshBasicMaterial({ map: textTex, transparent: true });
+            const label = new THREE.Mesh(labelGeo, labelMat);
+            label.position.set(0, height / 2 + 0.175, 1.06);
+            group.add(label);
+
+            group.position.x = startX + (idx * 1.3);
+            sortSearchGroup.add(group);
+
+            books.push({ group, value: val, mesh: bookMesh, height });
+        });
+    }
+
+    function shuffleBooks() {
+        if (isAnimating) return;
+        const isEn = (currentLang === 'en');
+        hideAll3DPointers();
+        bookValues = bookValues.sort(() => Math.random() - 0.5);
+        createBooks();
+        setStatus(
+            isEn ? 'BOOKSHELF SHUFFLED' : 'RAK BUKU DIACAK',
+            isEn ? 'Book thicknesses randomized again.' : 'Posisi ketebalan buku diacak kembali.'
+        );
+        showToast(isEn ? 'Books successfully shuffled!' : 'Buku berhasil diacak!');
+    }
+
+    async function highlightBook(index, colorHex = 0xf59e0b) {
+        if (!books[index]) return;
+        books[index].mesh.material.color.setHex(colorHex);
+    }
+
+    async function resetBookColors() {
+        books.forEach((b, idx) => {
+            b.mesh.material.color.setHex(PALETTE[idx % PALETTE.length]);
+        });
+    }
+
+    async function swapBooks(i, j) {
+        playSound('step');
+        const posX_I = books[i].group.position.x;
+        const posX_J = books[j].group.position.x;
+
+        books[i].group.position.x = posX_J;
+        books[j].group.position.x = posX_I;
+
+        const temp = books[i];
+        books[i] = books[j];
+        books[j] = temp;
+
+        await sleep(400);
+    }
+
+    async function runSortSearch() {
+        if (isAnimating) return;
+        const isEn = (currentLang === 'en');
+        isAnimating = true;
+        document.getElementById('btn-run-sort').disabled = true;
+
+        const algo = document.getElementById('algo-select').value;
+        const target = parseInt(document.getElementById('search-target').value) || 45;
+
+        hideAll3DPointers();
+
+        if (algo === 'bubble') {
+            setStatus(
+                'BUBBLE SORT',
+                isEn ? 'Starting pairwise adjacent comparisons...' : 'Mulai iterasi perbandingan elemen berdampingan...'
+            );
+            const n = books.length;
+
+            for (let i = 0; i < n - 1; i++) {
+                for (let j = 0; j < n - i - 1; j++) {
+                    await resetBookColors();
+                    setPointerPos('j', j, 0.4);
+                    setPointerPos('i', j + 1, 0.8);
+
+                    await highlightBook(j, 0x38bdf8);
+                    await highlightBook(j + 1, 0x38bdf8);
+                    playSound('compare');
+
+                    setStatus(
+                        isEn ? 'BUBBLE SORT (COMPARE)' : 'BUBBLE SORT (PERBANDINGAN)',
+                        isEn ? `Compare Book [${books[j].value}] and [${books[j+1].value}].` : `Bandingkan Buku [${books[j].value}] dan [${books[j+1].value}].`
+                    );
+                    await sleep(500);
+
+                    if (books[j].value > books[j + 1].value) {
+                        setStatus(
+                            isEn ? 'BUBBLE SORT (SWAP)' : 'BUBBLE SORT (SWAP)',
+                            isEn ? `Book [${books[j].value}] > [${books[j+1].value}]. Swapping positions!` : `Buku [${books[j].value}] > [${books[j+1].value}]. Tukar posisi!`
+                        );
+                        await highlightBook(j, 0xef4444);
+                        await highlightBook(j + 1, 0xef4444);
+                        await swapBooks(j, j + 1);
+                    }
+                }
+                await highlightBook(n - 1 - i, 0x10b981);
+            }
+            hideAll3DPointers();
+            await resetBookColors();
+            playSound('success');
+            setStatus(
+                isEn ? 'BUBBLE SORT COMPLETE' : 'BUBBLE SORT SELESAI',
+                isEn ? 'All books successfully ordered in ascending sequence!' : 'Semua buku telah berhasil terurut secara ascending dari terkecil ke terbesar!'
+            );
+        }
+        else if (algo === 'selection') {
+            setStatus(
+                'SELECTION SORT',
+                isEn ? 'Locating minimal key in remaining unsorted subarray...' : 'Mulai mencari nilai terkecil pada bagian subarray belum terurut...'
+            );
+            const n = books.length;
+
+            for (let i = 0; i < n; i++) {
+                let minIdx = i;
+                setPointerPos('i', i, 0.8);
+                setPointerPos('min', minIdx, 0.4);
+
+                for (let j = i + 1; j < n; j++) {
+                    await resetBookColors();
+                    setPointerPos('i', i, 0.8);
+                    setPointerPos('min', minIdx, 0.4);
+                    setPointerPos('j', j, 1.2);
+
+                    await highlightBook(minIdx, 0xec4899);
+                    await highlightBook(j, 0x38bdf8);
+                    playSound('compare');
+
+                    setStatus(
+                        isEn ? 'SELECTION SORT (FIND MIN)' : 'SELECTION SORT (CARI MINIMUM)',
+                        isEn ? `Compare temporary Min [${books[minIdx].value}] against [${books[j].value}].` : `Bandingkan nilai Min sementara [${books[minIdx].value}] dengan [${books[j].value}].`
+                    );
+                    await sleep(450);
+
+                    if (books[j].value < books[minIdx].value) {
+                        minIdx = j;
+                        setPointerPos('min', minIdx, 0.4);
+                        setStatus(
+                            isEn ? 'SELECTION SORT (NEW MIN)' : 'SELECTION SORT (MIN BARU)',
+                            isEn ? `New Minimum discovered: [${books[minIdx].value}]!` : `Nilai Minimum baru ditemukan: [${books[minIdx].value}]!`
+                        );
+                        await highlightBook(minIdx, 0xef4444);
+                        await sleep(350);
+                    }
+                }
+
+                if (minIdx !== i) {
+                    setStatus(
+                        isEn ? 'SELECTION SORT (SWAP)' : 'SELECTION SORT (SWAP)',
+                        isEn ? `Swap minimum [${books[minIdx].value}] to subarray front [Index ${i}].` : `Tukar nilai minimum [${books[minIdx].value}] ke posisi terdepan subarray [indeks ${i}].`
+                    );
+                    await swapBooks(i, minIdx);
+                }
+                await highlightBook(i, 0x10b981);
+            }
+            hideAll3DPointers();
+            await resetBookColors();
+            playSound('success');
+            setStatus(
+                isEn ? 'SELECTION SORT COMPLETE' : 'SELECTION SORT SELESAI',
+                isEn ? 'Selection sort completed successfully!' : 'Proses pengurutan seleksi nilai minimum selesai dengan sukses!'
+            );
+        }
+        else if (algo === 'linear') {
+            setStatus(
+                'LINEAR SEARCH',
+                isEn ? `Scanning for target book [${target}] sequentially from left to right...` : `Mencari buku berlabel Target [${target}] satu per satu dari kiri ke kanan...`
+            );
+            let found = false;
+
+            for (let i = 0; i < books.length; i++) {
+                await resetBookColors();
+                setPointerPos('i', i, 0.5);
+                await highlightBook(i, 0xf59e0b);
+                playSound('step');
+
+                setStatus(
+                    isEn ? 'LINEAR SEARCH (INSPECT)' : 'LINEAR SEARCH (CEK POSISI)',
+                    isEn ? `Inspecting Shelf #${i + 1}: Does [${books[i].value}] == Target [${target}]?` : `Memeriksa Rak Posisi ke-${i + 1}: Apakah [${books[i].value}] == Target [${target}]?`
+                );
+                await sleep(600);
+
+                if (books[i].value === target) {
+                    await highlightBook(i, 0x10b981);
+                    playSound('success');
+                    setStatus(
+                        isEn ? 'SEARCH SUCCESS' : 'PENCARIAN BERHASIL',
+                        isEn ? `Target [${target}] FOUND on shelf #${i + 1} (Index ${i})!` : `Target [${target}] DITEMUKAN pada rak posisi ke-${i + 1} (Indeks ${i})!`
+                    );
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                hideAll3DPointers();
+                await resetBookColors();
+                showToast(isEn ? `Target book [${target}] not found.` : `Buku Target [${target}] tidak ditemukan.`);
+                setStatus(
+                    isEn ? 'SEARCH FAILED' : 'PENCARIAN GAGAL',
+                    isEn ? `Entire collection inspected. Book [${target}] does not exist.` : `Seluruh rak telah diperiksa. Buku berlabel [${target}] tidak ada.`
+                );
+            }
+        }
+        else if (algo === 'binary') {
+            setStatus(
+                'BINARY SEARCH',
+                isEn ? 'Step 1: Sorting books first (Strict Binary Search Prerequisite)...' : 'Langkah 1: Mengurutkan buku terlebih dahulu (Syarat Mutlak Binary Search)...'
+            );
+            bookValues.sort((a, b) => a - b);
+            createBooks();
+            await sleep(600);
+
+            let low = 0;
+            let high = books.length - 1;
+            let found = false;
+
+            while (low <= high) {
+                let mid = Math.floor((low + high) / 2);
+
+                await resetBookColors();
+                setPointerPos('low', low, 0.4);
+                setPointerPos('mid', mid, 0.8);
+                setPointerPos('high', high, 1.2);
+
+                await highlightBook(mid, 0xa855f7);
+                playSound('compare');
+
+                setStatus(
+                    isEn ? 'BINARY SEARCH (TEST MID)' : 'BINARY SEARCH (CEK MID)',
+                    isEn ? `Range [Low:${low}, High:${high}] -> Probe Mid = Index ${mid} (Value: [${books[mid].value}]).` : `Rentang [Low:${low}, High:${high}] -> Evaluasi Mid = Indeks ${mid} (Nilai: [${books[mid].value}]).`
+                );
+                await sleep(900);
+
+                if (books[mid].value === target) {
+                    await highlightBook(mid, 0x10b981);
+                    playSound('success');
+                    setStatus(
+                        isEn ? 'BINARY SEARCH SUCCESS' : 'BINARY SEARCH BERHASIL',
+                        isEn ? `Target [${target}] FOUND precisely at Midpoint Index [${mid}]!` : `Target [${target}] DITEMUKAN persis pada indeks tengah Mid [${mid}]!`
+                    );
+                    found = true;
+                    break;
+                } else if (books[mid].value < target) {
+                    setStatus(
+                        isEn ? 'BINARY SEARCH (PRUNE LEFT)' : 'BINARY SEARCH (ELIMINASI KIRI)',
+                        isEn ? `Mid [${books[mid].value}] < Target [${target}]. Discard left half! Low shifts to Mid + 1.` : `Nilai Mid [${books[mid].value}] < Target [${target}]. Abaikan separuh kiri! Low bergeser ke Mid + 1.`
+                    );
+                    low = mid + 1;
+                } else {
+                    setStatus(
+                        isEn ? 'BINARY SEARCH (PRUNE RIGHT)' : 'BINARY SEARCH (ELIMINASI KANAN)',
+                        isEn ? `Mid [${books[mid].value}] > Target [${target}]. Discard right half! High shifts to Mid - 1.` : `Nilai Mid [${books[mid].value}] > Target [${target}]. Abaikan separuh kanan! High bergeser ke Mid - 1.`
+                    );
+                    high = mid - 1;
+                }
+                await sleep(600);
+            }
+
+            if (!found) {
+                hideAll3DPointers();
+                await resetBookColors();
+                showToast(isEn ? `Target [${target}] not found.` : `Target [${target}] tidak ditemukan.`);
+                setStatus(
+                    isEn ? 'BINARY SEARCH FAILED' : 'BINARY SEARCH GAGAL',
+                    isEn ? `Search space exhausted (Low > High). Target [${target}] was not found.` : `Ruang pencarian habis (Low > High). Target [${target}] tidak ditemukan.`
+                );
+            }
+        }
+
+        isAnimating = false;
+        document.getElementById('btn-run-sort').disabled = false;
+    }
+
+    document.getElementById('algo-select').addEventListener('change', (e) => {
+        const val = e.target.value;
+        const targetInput = document.getElementById('search-target');
+        if (val === 'linear' || val === 'binary') {
+            targetInput.classList.remove('hidden');
+        } else {
+            targetInput.classList.add('hidden');
+        }
+        updateTheory('sortsearch');
+    });
+
+    // ==========================================
+    // COMPREHENSIVE THEORY & ANALOGY UPDATER
+    // ==========================================
+    function updateTheory(module) {
+        const theoryBox = document.getElementById('theory-box');
+        const isEn = (currentLang === 'en');
+
+        if (module === 'stack') {
+            setStatus(
+                isEn ? 'STACK (PLATE TOWER)' : 'STACK (TUMPUKAN PIRING)',
+                isEn ? 'Ready for Stack simulation (LIFO).' : 'Siap melakukan simulasi Stack (LIFO).'
+            );
+            theoryBox.innerHTML = isEn ? `
+                <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/40 space-y-2">
+                    <div class="font-bold text-indigo-300 flex items-center space-x-2">
+                        <i class="fa-solid fa-arrows-up-down"></i>
+                        <span>Core Principle: LIFO (Last In, First Out)</span>
+                    </div>
+                    <p class="text-slate-300 leading-relaxed">
+                        The element that was <b>last inserted</b> is the <b>first to be removed</b>. All items are pushed and popped exclusively through a single point called the <b>Top</b>.
+                    </p>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="font-bold text-amber-400 flex items-center space-x-1.5">
+                        <i class="fa-solid fa-earth-americas"></i>
+                        <span>Real-World Analogies:</span>
+                    </div>
+                    <ul class="list-disc pl-4 space-y-1.5 text-slate-300">
+                        <li><b>Stack of Ceramic Plates:</b> New plates are placed onto the peak of the pile, and diners grab the topmost plate first.</li>
+                        <li><b>Undo Feature (Ctrl+Z):</b> The most recent text mutation is the very first action reverted when Undo is tapped.</li>
+                        <li><b>Call Stack in Runtimes:</b> System memory maintains nested function execution frames.</li>
+                    </ul>
+                </div>
+
+                <div class="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1.5 font-mono-code">
+                    <div class="text-[11px] font-bold text-cyan-400">Essential Stack Operations:</div>
+                    <p>• <b>Push:</b> Pushes a new element onto the Top.</p>
+                    <p>• <b>Pop:</b> Evicts and returns the topmost element.</p>
+                    <p>• <b>Peek:</b> Inspects the Top element without removing it.</p>
+                </div>
+            ` : `
+                <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/40 space-y-2">
+                    <div class="font-bold text-indigo-300 flex items-center space-x-2">
+                        <i class="fa-solid fa-arrows-up-down"></i>
+                        <span>Prinsip Utama: LIFO (Last In, First Out)</span>
+                    </div>
+                    <p class="text-slate-300 leading-relaxed">
+                        Elemen data yang <b>terakhir kali dimasukkan</b> adalah elemen yang <b>pertama kali dikeluarkan</b>. Elemen hanya dapat diakses melalui satu pintu utama yang disebut <b>Top</b>.
+                    </p>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="font-bold text-amber-400 flex items-center space-x-1.5">
+                        <i class="fa-solid fa-earth-americas"></i>
+                        <span>Analogi Dunia Nyata:</span>
+                    </div>
+                    <ul class="list-disc pl-4 space-y-1.5 text-slate-300">
+                        <li><b>Tumpukan Piring Keramik:</b> Piring baru selalu diletakkan di paling atas tumpukan, dan saat ingin mengambil piring untuk makan, kita mengambil piring teratas terlebih dahulu.</li>
+                        <li><b>Tombol Undo (Ctrl+Z) Editor:</b> Ketikan teks terakhir adalah hal pertama yang dibatalkan saat Anda menekan Undo.</li>
+                        <li><b>Call Stack Fungsi Program:</b> Memori komputer menyimpan tumpukan pemanggilan fungsi (function calls).</li>
+                    </ul>
+                </div>
+
+                <div class="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1.5 font-mono-code">
+                    <div class="text-[11px] font-bold text-cyan-400">Operasi Dasar Stack:</div>
+                    <p>• <b>Push:</b> Menambahkan elemen baru ke Atas (Top).</p>
+                    <p>• <b>Pop:</b> Menghapus & mengembalikan elemen teratas.</p>
+                    <p>• <b>Peek:</b> Melihat nilai teratas tanpa menghapusnya.</p>
+                </div>
+            `;
+        }
+        else if (module === 'queue') {
+            setStatus(
+                isEn ? 'QUEUE (SUPERMARKET CHECKOUT)' : 'QUEUE (KASIR SUPERMARKET)',
+                isEn ? 'Ready for Queue simulation (FIFO).' : 'Siap melakukan simulasi Queue (FIFO).'
+            );
+            theoryBox.innerHTML = isEn ? `
+                <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/40 space-y-2">
+                    <div class="font-bold text-indigo-300 flex items-center space-x-2">
+                        <i class="fa-solid fa-users-line"></i>
+                        <span>Core Principle: FIFO (First In, First Out)</span>
+                    </div>
+                    <p class="text-slate-300 leading-relaxed">
+                        The element that arrives <b>earliest</b> will be <b>serviced and dequeued first</b>. Features two distinct termini: <b>Rear/Back</b> (for insertion) and <b>Front</b> (for removal).
+                    </p>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="font-bold text-amber-400 flex items-center space-x-1.5">
+                        <i class="fa-solid fa-earth-americas"></i>
+                        <span>Real-World Analogies:</span>
+                    </div>
+                    <ul class="list-disc pl-4 space-y-1.5 text-slate-300">
+                        <li><b>Supermarket Checkout:</b> Shoppers arriving earlier at the cashier are scanned and served ahead of later arrivals.</li>
+                        <li><b>Printer Spooling:</b> Documents queued earliest to the spool buffer are printed first.</li>
+                        <li><b>HTTP Server Queue:</b> Inbound web requests are handled sequentially by timestamp.</li>
+                    </ul>
+                </div>
+
+                <div class="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1.5 font-mono-code">
+                    <div class="text-[11px] font-bold text-cyan-400">Essential Queue Operations:</div>
+                    <p>• <b>Enqueue:</b> Inserts a new customer to the Back (Rear).</p>
+                    <p>• <b>Dequeue:</b> Services and removes the leading customer (Front).</p>
+                </div>
+            ` : `
+                <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/40 space-y-2">
+                    <div class="font-bold text-indigo-300 flex items-center space-x-2">
+                        <i class="fa-solid fa-users-line"></i>
+                        <span>Prinsip Utama: FIFO (First In, First Out)</span>
+                    </div>
+                    <p class="text-slate-300 leading-relaxed">
+                        Elemen yang <b>pertama kali datang</b> akan <b>pertama kali dilayani & keluar</b>. Memiliki dua ujung pintu: <b>Rear/Back</b> (untuk masuk) dan <b>Front</b> (untuk keluar).
+                    </p>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="font-bold text-amber-400 flex items-center space-x-1.5">
+                        <i class="fa-solid fa-earth-americas"></i>
+                        <span>Analogi Dunia Nyata:</span>
+                    </div>
+                    <ul class="list-disc pl-4 space-y-1.5 text-slate-300">
+                        <li><b>Antrean Kasir Supermarket:</b> Pembeli yang paling awal mengantre di meja kasir dilayani lebih dahulu sebelum pembeli di belakangnya.</li>
+                        <li><b>Printer Spooling:</b> Dokumen yang pertama ditransmit ke printer akan dicetak lebih dahulu.</li>
+                        <li><b>Antrean Server Web:</b> Request HTTP dari client diproses sesuai urutan waktu kedatangan.</li>
+                    </ul>
+                </div>
+
+                <div class="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1.5 font-mono-code">
+                    <div class="text-[11px] font-bold text-cyan-400">Operasi Utama Queue:</div>
+                    <p>• <b>Enqueue:</b> Menambahkan elemen di posisi Belakang (Rear).</p>
+                    <p>• <b>Dequeue:</b> Melayani & menghapus elemen terdepan (Front).</p>
+                </div>
+            `;
+        }
+        else if (module === 'linkedlist') {
+            setStatus(
+                isEn ? 'LINKED LIST (TRAIN CARRIAGES)' : 'LINKED LIST (KERETA API)',
+                isEn ? 'Ready for Singly Linked List simulation.' : 'Siap melakukan simulasi Singly Linked List.'
+            );
+            theoryBox.innerHTML = isEn ? `
+                <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/40 space-y-2">
+                    <div class="font-bold text-indigo-300 flex items-center space-x-2">
+                        <i class="fa-solid fa-link"></i>
+                        <span>Core Principle: Dynamic Heap Allocation</span>
+                    </div>
+                    <p class="text-slate-300 leading-relaxed">
+                        A non-contiguous collection of Nodes scattered in heap memory, where each Node contains a <b>Payload Value</b> and a <b>Next Pointer</b> referencing the subsequent node.
+                    </p>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="font-bold text-amber-400 flex items-center space-x-1.5">
+                        <i class="fa-solid fa-earth-americas"></i>
+                        <span>Real-World Analogy:</span>
+                    </div>
+                    <p class="text-slate-300 leading-relaxed">
+                        <b>Train Carriages:</b> The locomotive functions as the <b>HEAD</b> pointer. Every carriage (Node) is linked to the next via a coupler chain (Pointer Next). The final car links to NULL.
+                    </p>
+                </div>
+
+                <div class="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1.5 font-mono-code">
+                    <div class="text-[11px] font-bold text-emerald-400">Advantage over Arrays:</div>
+                    <p>• Inserting or removing items at the front (Insert Head) is instantaneous O(1) without shifting any elements in memory.</p>
+                </div>
+            ` : `
+                <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/40 space-y-2">
+                    <div class="font-bold text-indigo-300 flex items-center space-x-2">
+                        <i class="fa-solid fa-link"></i>
+                        <span>Prinsip Utama: Alokasi Memori Dinamis</span>
+                    </div>
+                    <p class="text-slate-300 leading-relaxed">
+                        Kumpulan data (Node) yang tersebar di memori, di mana setiap Node menyimpan <b>Nilai Data</b> dan <b>Pointer (Next)</b> yang merujuk ke alamat node berikutnya.
+                    </p>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="font-bold text-amber-400 flex items-center space-x-1.5">
+                        <i class="fa-solid fa-earth-americas"></i>
+                        <span>Analogi Dunia Nyata:</span>
+                    </div>
+                    <p class="text-slate-300 leading-relaxed">
+                        <b>Rangkaian Gerbong Kereta Api:</b> Lokomotif bertindak sebagai pointer <b>HEAD</b> penunjuk awal. Setiap gerbong (Node) terhubung dengan gerbong berikutnya menggunakan sambungan pengait rantai besi (Pointer Next). Gerbong terakhir merujuk ke tanah kosong (NULL).
+                    </p>
+                </div>
+
+                <div class="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1.5 font-mono-code">
+                    <div class="text-[11px] font-bold text-emerald-400">Keunggulan dibanding Array:</div>
+                    <p>• Penambahan/penghapusan elemen di awal (Insert Head) bersifat instant O(1) tanpa perlu menggeser seluruh elemen lain di memori.</p>
+                </div>
+            `;
+        }
+        else if (module === 'sortsearch') {
+            const algo = document.getElementById('algo-select').value;
+
+            if (algo === 'bubble') {
+                theoryBox.innerHTML = isEn ? `
+                    <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/40 space-y-1.5">
+                        <div class="font-bold text-indigo-300 text-xs flex items-center space-x-2">
+                            <i class="fa-solid fa-arrow-up-91"></i>
+                            <span>BUBBLE SORT</span>
+                        </div>
+                        <p class="text-slate-300 text-[11px] leading-relaxed">
+                            Repeatedly compares pairs of adjacent elements and swaps them if disordered. The largest elements gradually "bubble up" to the top right of the array.
+                        </p>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1.5 font-mono-code text-[11px]">
+                        <div class="text-amber-400 font-bold">Time Complexity Analysis:</div>
+                        <p>• <b>Best Case:</b> O(n) <span class="text-slate-400">(Pre-sorted array)</span></p>
+                        <p>• <b>Average / Worst Case:</b> O(n²) <span class="text-slate-400">(Requires n × n comparisons)</span></p>
+                        <p>• <b>Space Complexity:</b> O(1) <span class="text-slate-400">(In-place)</span></p>
+                    </div>
+
+                    <div class="space-y-1 text-slate-300 text-[11px]">
+                        <div class="font-bold text-cyan-400">Algorithm Steps:</div>
+                        <p>1. Start at index j=0. Compare Book[j] with Book[j+1].</p>
+                        <p>2. If Book[j] > Book[j+1], swap their physical positions.</p>
+                        <p>3. Advance j to the right and repeat until all passes finish.</p>
+                    </div>
+                ` : `
+                    <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/40 space-y-1.5">
+                        <div class="font-bold text-indigo-300 text-xs flex items-center space-x-2">
+                            <i class="fa-solid fa-arrow-up-91"></i>
+                            <span>BUBBLE SORT (Gelembung)</span>
+                        </div>
+                        <p class="text-slate-300 text-[11px] leading-relaxed">
+                            Membandingkan dua elemen berurutan (j dan j+1) secara berulang-ulang dari awal hingga akhir, lalu menukarnya jika urutannya salah. Elemen terbesar akan "mengapung" naik ke posisi paling kanan seperti gelembung udara.
+                        </p>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1.5 font-mono-code text-[11px]">
+                        <div class="text-amber-400 font-bold">Analisis Kompleksitas Waktu:</div>
+                        <p>• <b>Best Case:</b> O(n) <span class="text-slate-400">(Array sudah terurut)</span></p>
+                        <p>• <b>Average / Worst Case:</b> O(n²) <span class="text-slate-400">(Perlu n × n perbandingan)</span></p>
+                        <p>• <b>Space Complexity:</b> O(1) <span class="text-slate-400">(In-place sorting)</span></p>
+                    </div>
+
+                    <div class="space-y-1 text-slate-300 text-[11px]">
+                        <div class="font-bold text-cyan-400">Cara Kerja Step-by-Step:</div>
+                        <p>1. Mulai dari indeks j=0. Bandingkan Buku[j] dan Buku[j+1].</p>
+                        <p>2. Jika Buku[j] > Buku[j+1], lakukan pertukaran posisi (Swap).</p>
+                        <p>3. Geser j ke kanan. Ulangi proses hingga ujung akhir array terurut.</p>
+                    </div>
+                `;
+            } else if (algo === 'selection') {
+                theoryBox.innerHTML = isEn ? `
+                    <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/40 space-y-1.5">
+                        <div class="font-bold text-indigo-300 text-xs flex items-center space-x-2">
+                            <i class="fa-solid fa-arrow-down-short-wide"></i>
+                            <span>SELECTION SORT</span>
+                        </div>
+                        <p class="text-slate-300 text-[11px] leading-relaxed">
+                            Partitions the list into sorted (left) and unsorted (right) segments. Continually locates the <b>minimum</b> value in the unsorted slice and swaps it into the boundary index.
+                        </p>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1.5 font-mono-code text-[11px]">
+                        <div class="text-amber-400 font-bold">Time Complexity Analysis:</div>
+                        <p>• <b>Best / Average / Worst Case:</b> O(n²)</p>
+                        <p>• <b>Advantage:</b> Minimal swaps (at most n swaps overall).</p>
+                        <p>• <b>Space Complexity:</b> O(1)</p>
+                    </div>
+
+                    <div class="space-y-1 text-slate-300 text-[11px]">
+                        <div class="font-bold text-cyan-400">Algorithm Steps:</div>
+                        <p>1. Designate index i as the start of the unsorted subarray.</p>
+                        <p>2. Locate the smallest element from i through end; label it <b class="text-pink-400">Min</b>.</p>
+                        <p>3. Swap the <b class="text-pink-400">Min</b> element with position i.</p>
+                    </div>
+                ` : `
+                    <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/40 space-y-1.5">
+                        <div class="font-bold text-indigo-300 text-xs flex items-center space-x-2">
+                            <i class="fa-solid fa-arrow-down-short-wide"></i>
+                            <span>SELECTION SORT (Seleksi Nilai Minimum)</span>
+                        </div>
+                        <p class="text-slate-300 text-[11px] leading-relaxed">
+                            Membagi array menjadi dua bagian: bagian terurut di kiri dan belum terurut di kanan. Algoritma mencari elemen <b>terkecil (Minimum)</b> pada bagian kanan, lalu menukarnya ke posisi paling depan bagian tak terurut.
+                        </p>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1.5 font-mono-code text-[11px]">
+                        <div class="text-amber-400 font-bold">Analisis Kompleksitas Waktu:</div>
+                        <p>• <b>Best / Average / Worst Case:</b> O(n²)</p>
+                        <p>• <b>Keunggulan:</b> Jumlah swap minimal (Maksimal n kali pertukaran).</p>
+                        <p>• <b>Space Complexity:</b> O(1)</p>
+                    </div>
+
+                    <div class="space-y-1 text-slate-300 text-[11px]">
+                        <div class="font-bold text-cyan-400">Cara Kerja Step-by-Step:</div>
+                        <p>1. Tetapkan posisi i sebagai awal bagian tak terurut.</p>
+                        <p>2. Cari nilai terkecil dari indeks i sampai akhir array, catat sebagai <b class="text-pink-400">Min</b>.</p>
+                        <p>3. Tukar elemen <b class="text-pink-400">Min</b> dengan elemen pada posisi i.</p>
+                    </div>
+                `;
+            } else if (algo === 'linear') {
+                theoryBox.innerHTML = isEn ? `
+                    <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/40 space-y-1.5">
+                        <div class="font-bold text-indigo-300 text-xs flex items-center space-x-2">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <span>LINEAR SEARCH</span>
+                        </div>
+                        <p class="text-slate-300 text-[11px] leading-relaxed">
+                            A straightforward search procedure that traverses elements sequentially from the first index until a matching key is identified or the dataset terminates.
+                        </p>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1.5 font-mono-code text-[11px]">
+                        <div class="text-amber-400 font-bold">Time Complexity Analysis:</div>
+                        <p>• <b>Best Case:</b> O(1) <span class="text-slate-400">(Target located at index 0)</span></p>
+                        <p>• <b>Worst Case:</b> O(n) <span class="text-slate-400">(Target absent or at final index)</span></p>
+                        <p>• <b>Precondition:</b> Does NOT require sorted input.</p>
+                    </div>
+
+                    <div class="space-y-1 text-slate-300 text-[11px]">
+                        <div class="font-bold text-cyan-400">Real-World Analogy:</div>
+                        <p>Scanning an unalphabetized paper attendee sheet line by line to locate a person's name.</p>
+                    </div>
+                ` : `
+                    <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/40 space-y-1.5">
+                        <div class="font-bold text-indigo-300 text-xs flex items-center space-x-2">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <span>LINEAR SEARCH (Pencarian Sekuensial)</span>
+                        </div>
+                        <p class="text-slate-300 text-[11px] leading-relaxed">
+                            Metode pencarian paling sederhana yang memeriksa setiap elemen array satu per satu mulai dari indeks pertama hingga target ditemukan atau seluruh elemen selesai diperiksa.
+                        </p>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1.5 font-mono-code text-[11px]">
+                        <div class="text-amber-400 font-bold">Analisis Kompleksitas Waktu:</div>
+                        <p>• <b>Best Case:</b> O(1) <span class="text-slate-400">(Target ada di elemen pertama)</span></p>
+                        <p>• <b>Worst Case:</b> O(n) <span class="text-slate-400">(Target di paling akhir atau tidak ada)</span></p>
+                        <p>• <b>Syarat Mutlak:</b> Tidak memerlukan data terurut.</p>
+                    </div>
+
+                    <div class="space-y-1 text-slate-300 text-[11px]">
+                        <div class="font-bold text-cyan-400">Analogi Real-World:</div>
+                        <p>Mencari nama teman pada daftar absen acak yang tidak tersusun secara alfabetis dengan membaca baris demi baris dari atas ke bawah.</p>
+                    </div>
+                `;
+            } else if (algo === 'binary') {
+                theoryBox.innerHTML = isEn ? `
+                    <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/40 space-y-1.5">
+                        <div class="font-bold text-indigo-300 text-xs flex items-center space-x-2">
+                            <i class="fa-solid fa-code-branch"></i>
+                            <span>BINARY SEARCH</span>
+                        </div>
+                        <p class="text-slate-300 text-[11px] leading-relaxed">
+                            A highly efficient <i>Divide and Conquer</i> search algorithm that repeatedly halves the active search interval until the key is discovered.
+                        </p>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1.5 font-mono-code text-[11px]">
+                        <div class="text-amber-400 font-bold">Time Complexity Analysis:</div>
+                        <p>• <b>Best Case:</b> O(1) <span class="text-slate-400">(Target rests on the Midpoint)</span></p>
+                        <p>• <b>Worst Case:</b> O(log n) <span class="text-slate-400">(Extremely fast for large datasets)</span></p>
+                        <p>• <b>Mandatory Condition:</b> <b class="text-emerald-400">Data MUST be pre-sorted!</b></p>
+                    </div>
+
+                    <div class="space-y-1 text-slate-300 text-[11px]">
+                        <div class="font-bold text-cyan-400">Algorithm Steps:</div>
+                        <p>1. Compute Midpoint Mid = (Low + High) / 2.</p>
+                        <p>2. If Value[Mid] == Target, search succeeds!</p>
+                        <p>3. If Value[Mid] < Target, prune the left half (Low = Mid + 1).</p>
+                        <p>4. If Value[Mid] > Target, prune the right half (High = Mid - 1).</p>
+                    </div>
+                ` : `
+                    <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/40 space-y-1.5">
+                        <div class="font-bold text-indigo-300 text-xs flex items-center space-x-2">
+                            <i class="fa-solid fa-code-branch"></i>
+                            <span>BINARY SEARCH (Pencarian Bagi Dua)</span>
+                        </div>
+                        <p class="text-slate-300 text-[11px] leading-relaxed">
+                            Algoritma pencarian efisien berprinsip <i>Divide and Conquer</i>. Mencari elemen target dengan cara terus-menerus membagi dua ruang pencarian sampai target ditemukan.
+                        </p>
+                    </div>
+
+                    <div class="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1.5 font-mono-code text-[11px]">
+                        <div class="text-amber-400 font-bold">Analisis Kompleksitas Waktu:</div>
+                        <p>• <b>Best Case:</b> O(1) <span class="text-slate-400">(Target persis di elemen tengah Mid)</span></p>
+                        <p>• <b>Worst Case:</b> O(log n) <span class="text-slate-400">(Sangat cepat untuk jutaan data)</span></p>
+                        <p>• <b>Syarat Mutlak:</b> <b class="text-emerald-400">Data WAJIB terurut (Sorted)!</b></p>
+                    </div>
+
+                    <div class="space-y-1 text-slate-300 text-[11px]">
+                        <div class="font-bold text-cyan-400">Cara Kerja Step-by-Step:</div>
+                        <p>1. Hitung titik tengah Mid = (Low + High) / 2.</p>
+                        <p>2. Jika Nilai[Mid] == Target, pencarian sukses!</p>
+                        <p>3. Jika Nilai[Mid] < Target, abaikan separuh kiri (Low = Mid + 1).</p>
+                        <p>4. Jika Nilai[Mid] > Target, abaikan separuh kanan (High = Mid - 1).</p>
+                    </div>
+                `;
+            }
+        }
+    }
+
+    function init() {
+        initScene();
+        buildStackScene();
+        buildQueueScene();
+        buildLinkedListScene();
+        buildSortSearchScene();
+
+        window.switchTab('stack');
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+    }
+
+    window.onload = init;
+</script>
+</body>
+</html>

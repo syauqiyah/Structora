@@ -1,0 +1,47 @@
+name: pba_pakhqq
+description: "A new Flutter project."
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.0.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+  flutter_animate: ^4.5.2
+  shared_preferences: ^2.3.5
+  http: ^1.2.2
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  image_picker: ^1.2.4
+  youtube_player_iframe: ^5.1.2
+  webview_flutter: ^4.7.0
+  url_launcher: ^6.3.3
+  fl_chart: ^1.3.0
+  flutter_local_notifications: ^22.3.3
+  timezone: ^0.11.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/logo.png
+    - assets/web/index.html
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/logo.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#060913"
+  adaptive_icon_foreground: "assets/logo.png"
+  adaptive_icon_foreground_inset: 16
