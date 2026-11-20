@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Structora AR & AI Simulation</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            overflow: hidden;
+            background-color: transparent !important;
+        }
+        .font-mono-code {
+            font-family: 'Fira Code', monospace;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.88);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .glass-button {
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: all 0.15s ease;
+        }
+        canvas {
+            display: block;
+            outline: none;
+            touch-action: none;
+        }
+    </style>
+</head>
+<body class="bg-transparent text-slate-100 h-screen w-screen flex flex-col">
+
+<!-- Area 3D Canvas Transparan Full Screen untuk Overlay Kamera -->
+<div id="canvas-container" class="relative w-full h-full shrink-0">
+
+    <!-- Notifikasi Toast Status ML Kit Object Detection -->
+    <div id="toast" class="absolute top-4 left-1/2 -translate-x-1/2 z-10 glass-panel px-4 py-1.5 rounded-full text-[11px] font-bold text-white shadow-2xl opacity-100 transition-opacity duration-300 pointer-events-none flex items-center space-x-2 border border-cyan-500/40">
+        <i class="fa-solid fa-camera-rotate text-cyan-400 text-xs animate-spin"></i>
+        <span id="toast-msg">AR AI Scanner Ready</span>
+    </div>
+</div>
+
+<script>
+    let scene, camera, renderer, controls;
+    let currentTab = 'stack';
+    let currentLang = 'id';
+    let stackGroup, queueGroup, linkedListGroup, sortSearchGroup;
+
+    const PALETTE = [
+        0x3b82f6, 0x10b981, 0xf59e0b, 0xef4444, 0x8b5cf6,
+        0x06b6d4, 0xec4899, 0x6366f1, 0x14b8a6, 0xf97316
+    ];
+
+    function showToast(msg) {
+        const toast = document.getElementById('toast');
+        document.getElementById('toast-msg').innerText = msg;
+        toast.classList.remove('opacity-0');
+        toast.classList.add('opacity-100');
+        setTimeout(() => {
+            toast.classList.remove('opacity-100');
+            toast.classList.add('opacity-0');
+        }, 2500);
+    }
+
+    // FUNGSI KONEKSI JAVASCRIPT BRIDGE DARI FLUTTER ML KIT
+    window.setMlKitDetectedObject = function(label, detectedTab) {
+        if (detectedTab) {
+            window.switchTab(detectedTab);
+        }
+        showToast(`AI ML Kit: Terdeteksi "${label}" -> Modul ${detectedTab.toUpperCase()}`);
+        if (window.detectAndAnchorObject) {
+            window.detectAndAnchorObject();
+        }
+    };
+
+    window.setLanguage = function(lang) {
+        currentLang = lang;
+    };
+
+    window.detectAndAnchorObject = function() {
+        if (!scene) return;
+        let targetGroup = null;
+        if (currentTab === 'stack') targetGroup = stackGroup;
+        else if (currentTab === 'queue') targetGroup = queueGroup;
+        else if (currentTab === 'linkedlist') targetGroup = linkedListGroup;
+        else if (currentTab === 'sortsearch') targetGroup = sortSearchGroup;
+
+        if (targetGroup) {
+            let count = 0;
+            const interval = setInterval(() => {
+                count++;
+                targetGroup.position.y = (count % 2 === 0) ? 0.3 : 0;
+                if (count >= 6) {
+                    clearInterval(interval);
+                    targetGroup.position.y = 0;
+                }
+            }, 100);
+        }
+    };
+
+    function initScene() {
+        const container = document.getElementById('canvas-container');
+
+        scene = new THREE.Scene();
+        scene.background = null;
+
+        camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+        camera.position.set(0, 7, 16);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setClearColor(0x000000, 0);
+        container.appendChild(renderer.domElement);
+
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+        scene.add(ambientLight);
+
+        const keyLight = new THREE.DirectionalLight(0xfffaed, 1.2);
+        keyLight.position.set(10, 20, 10);
+        scene.add(keyLight);
+
+        stackGroup = new THREE.Group();
+        queueGroup = new THREE.Group();
+        linkedListGroup = new THREE.Group();
+        sortSearchGroup = new THREE.Group();
+
+        scene.add(stackGroup);
+        scene.add(queueGroup);
+        scene.add(linkedListGroup);
+        scene.add(sortSearchGroup);
+
+        window.addEventListener('resize', () => {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+    }
+
+    window.switchTab = function(tabName) {
+        currentTab = tabName;
+        stackGroup.visible = (tabName === 'stack');
+        queueGroup.visible = (tabName === 'queue');
+        linkedListGroup.visible = (tabName === 'linkedlist');
+        sortSearchGroup.visible = (tabName === 'sortsearch');
+    };
+
+    function init() {
+        initScene();
+        window.switchTab('stack');
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+    }
+
+    window.onload = init;
+</script>
+</body>
+</html>
