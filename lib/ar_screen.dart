@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -354,7 +353,7 @@ class _ArSimulationScreenState extends State<ArSimulationScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      _isScanning ? Icons.autofreq_rounded : Icons.center_focus_strong_rounded,
+                      _isScanning ? Icons.auto_awesome_rounded : Icons.center_focus_strong_rounded,
                       color: const Color(0xFF00F0FF),
                       size: 16,
                     ),

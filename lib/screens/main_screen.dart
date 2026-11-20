@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../data/materi_data.dart';
 import '../services/notification_service.dart';
@@ -12,9 +14,10 @@ import '../services/firebase_service.dart';
 import '../utils/app_translations.dart';
 import '../widgets/evaluation_tab_widget.dart';
 import '../widgets/interactive_spotlight_overlay.dart';
-import '../widgets/readiness_dialog.dart';
 import '../widgets/simulation_3d_widget.dart';
 import '../widgets/youtube_player_widget.dart';
+import '../utils/youtube_utils.dart';
+import '../widgets/floating_glass_nav_bar.dart';
 import '../teacher_mode/teacher_content_helper.dart';
 
 import 'locked_quiz_screen.dart';
@@ -113,9 +116,21 @@ class _MainScreenState extends State<MainScreen> {
 
   Future<void> _checkAndShowSpotlightTutorial() async {
     final prefs = await SharedPreferences.getInstance();
-    final bool hasSeenTutorial = prefs.getBool('hasSeenTutorial') ?? false;
+    final String userEmail = widget.userEmail;
+    final String emailClean = userEmail.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+    final String studentTutorialKey = 'has_seen_tutorial_student_$emailClean';
+    final String legacyKey = FirebaseService.getUserKey(userEmail, 'hasSeenTutorial');
+
+    final bool hasSeenTutorial = (prefs.getBool(studentTutorialKey) ?? false) ||
+        (prefs.getBool(legacyKey) ?? false) ||
+        (prefs.getBool('has_seen_tutorial_student') ?? false);
 
     if (!hasSeenTutorial && mounted) {
+      // Immediately set flags to true in SharedPreferences so it will NEVER trigger again automatically
+      await prefs.setBool(studentTutorialKey, true);
+      await prefs.setBool(legacyKey, true);
+      await prefs.setBool('has_seen_tutorial_student', true);
+
       Future.delayed(const Duration(milliseconds: 600), () {
         if (!mounted) return;
         _showSpotlightWalkthrough();
@@ -132,7 +147,13 @@ class _MainScreenState extends State<MainScreen> {
         onFinish: () async {
           _removeSpotlightOverlay();
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('hasSeenTutorial', true);
+          final String userEmail = widget.userEmail;
+          final String emailClean = userEmail.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+          final String studentTutorialKey = 'has_seen_tutorial_student_$emailClean';
+          final String legacyKey = FirebaseService.getUserKey(userEmail, 'hasSeenTutorial');
+          await prefs.setBool(studentTutorialKey, true);
+          await prefs.setBool(legacyKey, true);
+          await prefs.setBool('has_seen_tutorial_student', true);
         },
         steps: [
           SpotlightStep(
@@ -146,10 +167,10 @@ class _MainScreenState extends State<MainScreen> {
           ),
           SpotlightStep(
             key: _academicStatusKey,
-            title: isEn ? 'Passing Standard 80 & Graduation' : 'Standar KKM 80 & Kelulusan',
+            title: isEn ? 'Passing Standard 75 & Graduation' : 'Standar KKM 75 & Kelulusan',
             desc: isEn
-                ? 'Track your academic requirements here. You must score at least 80 on every module assessment and final Post-Test.'
-                : 'Pantau syarat akademikmu di sini. Kamu wajib meraih nilai minimal 80 pada setiap asesmen modul serta Post-Test akhir untuk lulus.',
+                ? 'Track your academic requirements here. You must score at least 75 on every module assessment and final Post-Test.'
+                : 'Pantau syarat akademikmu di sini. Kamu wajib meraih nilai minimal 75 pada setiap asesmen modul serta Post-Test akhir untuk lulus.',
             icon: Icons.verified_outlined,
             accentColor: const Color(0xFF10B981),
           ),
@@ -208,19 +229,23 @@ class _MainScreenState extends State<MainScreen> {
 
   Future<void> _loadProfileData() async {
     final prefs = await SharedPreferences.getInstance();
+    final String userEmail = widget.userEmail.toLowerCase().trim();
 
     String? savedName = prefs.getString('userName');
     if (savedName == null || savedName.trim().isEmpty || savedName.toLowerCase() == 'pengguna') {
       if (widget.userName.isNotEmpty && widget.userName.toLowerCase() != 'pengguna') {
         savedName = widget.userName;
-      } else if (widget.userEmail.contains('@')) {
-        final prefix = widget.userEmail.split('@').first;
+      } else if (userEmail.contains('@')) {
+        final prefix = userEmail.split('@').first;
         savedName = prefix[0].toUpperCase() + prefix.substring(1);
       }
     }
 
+    final String userScopedKey = FirebaseService.getUserKey(userEmail, 'custom_profile_image');
+    final String? scopedImage = prefs.getString(userScopedKey);
+
     setState(() {
-      _customImagePath = prefs.getString('userCustomImage');
+      _customImagePath = (scopedImage != null && scopedImage.isNotEmpty) ? scopedImage : null;
       if (savedName != null && savedName.isNotEmpty) {
         _currentUserName = savedName;
       }
@@ -242,8 +267,28 @@ class _MainScreenState extends State<MainScreen> {
         final bytes = await image.readAsBytes();
         final base64Image = base64Encode(bytes);
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('userCustomImage', base64Image);
+        final String userEmail = widget.userEmail.toLowerCase().trim();
+        final String userScopedKey = FirebaseService.getUserKey(userEmail, 'custom_profile_image');
 
+        await prefs.setString(userScopedKey, base64Image);
+
+        // Also sync photo to Firestore user document
+        try {
+          final user = FirebaseAuth.instance.currentUser;
+          if (user != null) {
+            await FirebaseService.saveUserRole(
+              uid: user.uid,
+              email: userEmail,
+              name: _currentUserName,
+              role: 'student',
+              photoUrl: base64Image,
+            );
+          }
+        } catch (e) {
+          debugPrint('Error syncing photo to Firestore: $e');
+        }
+
+        if (!mounted) return;
         setState(() {
           _customImagePath = base64Image;
         });
@@ -265,28 +310,70 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _loadLearningProgress() async {
+    final String userEmail = widget.userEmail;
+    await FirebaseService.syncUserProgressOnLogin(userEmail);
+
     final prefs = await SharedPreferences.getInstance();
+
+    final String kSteps = FirebaseService.getUserKey(userEmail, 'completed_steps');
+    final String kPreBool = FirebaseService.getUserKey(userEmail, 'isPreTestCompleted');
+    final String kPreInt = FirebaseService.getUserKey(userEmail, 'preTestScore');
+    final String kPostBool = FirebaseService.getUserKey(userEmail, 'isPostTestCompleted');
+    final String kPostInt = FirebaseService.getUserKey(userEmail, 'postTestScore');
+
     setState(() {
-      _completedSteps = (prefs.getStringList('completed_steps') ?? []).toSet();
-      _isPreTestCompleted = prefs.getBool('isPreTestCompleted') ?? false;
-      _preTestScore = prefs.getInt('preTestScore') ?? 0;
-      _isPostTestCompleted = prefs.getBool('isPostTestCompleted') ?? false;
-      _postTestScore = prefs.getInt('postTestScore') ?? 0;
+      _completedSteps = (prefs.getStringList(kSteps) ?? []).toSet();
+      _isPreTestCompleted = prefs.getBool(kPreBool) ?? false;
+      _preTestScore = prefs.getInt(kPreInt) ?? 0;
+      _isPostTestCompleted = prefs.getBool(kPostBool) ?? false;
+      _postTestScore = prefs.getInt(kPostInt) ?? 0;
     });
   }
 
   Future<void> _resetLearningProgress() async {
     final isEn = LanguageController.instance.isEnglish;
+    final String userEmail = widget.userEmail;
+    final String cleanEmail = userEmail.toLowerCase().trim();
+    final String docId = cleanEmail.replaceAll(RegExp(r'[^\w.-]'), '_');
+
     final prefs = await SharedPreferences.getInstance();
+
+    final String kSteps = FirebaseService.getUserKey(userEmail, 'completed_steps');
+    final String kPreBool = FirebaseService.getUserKey(userEmail, 'isPreTestCompleted');
+    final String kPreInt = FirebaseService.getUserKey(userEmail, 'preTestScore');
+    final String kPostBool = FirebaseService.getUserKey(userEmail, 'isPostTestCompleted');
+    final String kPostInt = FirebaseService.getUserKey(userEmail, 'postTestScore');
+    final String kDiag = FirebaseService.getUserKey(userEmail, 'posttest_wrong_diagnostics');
+
+    await prefs.remove(kSteps);
+    await prefs.remove(kPreBool);
+    await prefs.remove(kPreInt);
+    await prefs.remove(kPostBool);
+    await prefs.remove(kPostInt);
+    await prefs.remove(kDiag);
+    for (var m in listModulMateri) {
+      await prefs.remove(FirebaseService.getUserKey(userEmail, 'score_${m['id']}'));
+      await prefs.remove('score_${m['id']}');
+    }
     await prefs.remove('completed_steps');
     await prefs.remove('isPreTestCompleted');
     await prefs.remove('preTestScore');
     await prefs.remove('isPostTestCompleted');
     await prefs.remove('postTestScore');
-    for (var m in listModulMateri) {
-      await prefs.remove('score_${m['id']}');
-    }
     await prefs.remove('posttest_wrong_diagnostics');
+
+    // Hapus dokumen progres pengguna di Cloud Firestore koleksi student_progress
+    try {
+      if (docId.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('student_progress')
+            .doc(docId)
+            .delete()
+            .timeout(const Duration(seconds: 4));
+      }
+    } catch (e) {
+      debugPrint('Error delete student_progress doc: $e');
+    }
 
     setState(() {
       _completedSteps.clear();
@@ -315,13 +402,16 @@ class _MainScreenState extends State<MainScreen> {
     final String stepId = '${moduleId}_$stepKey';
     if (!_completedSteps.contains(stepId)) {
       final prefs = await SharedPreferences.getInstance();
+      final userEmail = prefs.getString('userEmail') ?? widget.userEmail;
+
       setState(() {
         _completedSteps.add(stepId);
       });
-      await prefs.setStringList('completed_steps', _completedSteps.toList());
+
+      final String kSteps = FirebaseService.getUserKey(userEmail, 'completed_steps');
+      await prefs.setStringList(kSteps, _completedSteps.toList());
       await prefs.setInt('lastActiveTimestamp', DateTime.now().millisecondsSinceEpoch);
 
-      final userEmail = prefs.getString('userEmail') ?? widget.userEmail;
       final userName = prefs.getString('userName') ?? widget.userName;
       if (userEmail.isNotEmpty) {
         FirebaseService.saveStudentProgress(
@@ -408,6 +498,140 @@ class _MainScreenState extends State<MainScreen> {
     return true;
   }
 
+  void _showModuleTransitionDialog({
+    required VoidCallback onContinueNext,
+    required VoidCallback onReviewPrevious,
+  }) {
+    final bool isEn = LanguageController.instance.isEnglish;
+
+    final cardBg = _isDark ? const Color(0xFF0F172A) : Colors.white;
+    final textColor = _isDark ? Colors.white : const Color(0xFF0F172A);
+    final subTextColor = _isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
+    final accentColor = _isDark ? const Color(0xFF00F0FF) : const Color(0xFF0284C7);
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: cardBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: accentColor.withValues(alpha: 0.35), width: 1.2),
+        ),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: accentColor.withValues(alpha: 0.15),
+              child: Icon(Icons.help_outline_rounded, size: 22, color: accentColor),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                isEn ? 'Next Module Confirmation' : 'Konfirmasi Materi Selanjutnya',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isEn
+                  ? 'Are you ready to continue to the next module?'
+                  : 'Apakah kamu sudah siap untuk lanjut ke materi selanjutnya?',
+              style: TextStyle(fontSize: 13, color: subTextColor, height: 1.45),
+            ),
+            const SizedBox(height: 18),
+
+            // Tombol 1: Ya, Saya Siap Lanjut
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  onContinueNext();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accentColor,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  elevation: 0,
+                ),
+                icon: const Icon(Icons.check_circle_outline_rounded, size: 18, color: Colors.black),
+                label: Text(
+                  isEn ? 'Yes, I am Ready' : 'Ya, Saya Siap Lanjut',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Tombol 2: Ulangi Modul Sebelumnya
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  onReviewPrevious();
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.orange,
+                  side: const BorderSide(color: Colors.orange, width: 1.2),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.replay_rounded, size: 18, color: Colors.orange),
+                label: Text(
+                  isEn ? 'Review Previous Module' : 'Ulangi Modul Sebelumnya',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Tombol 3: Batal
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: () => Navigator.pop(ctx),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+                icon: Icon(Icons.close_rounded, size: 16, color: subTextColor),
+                label: Text(
+                  isEn ? 'Cancel' : 'Batal',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: subTextColor,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _navigateToExam(String type) async {
     final result = await Navigator.push(
       context,
@@ -448,11 +672,47 @@ class _MainScreenState extends State<MainScreen> {
         }
       }
     }
+
+    final String displayName = _currentUserName.isNotEmpty ? _currentUserName : widget.userEmail;
+    final String initialLetter = displayName.trim().isNotEmpty
+        ? displayName.trim()[0].toUpperCase()
+        : 'S';
+    final Color avatarBgColor = _getInitialAvatarBgColor(displayName);
+
     return CircleAvatar(
       radius: radius,
-      backgroundColor: _accentColor.withValues(alpha: 0.2),
-      child: Icon(Icons.person, size: radius * 1.1, color: _accentColor),
+      backgroundColor: avatarBgColor,
+      child: Text(
+        initialLetter,
+        style: TextStyle(
+          fontSize: radius * 0.9,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ),
     );
+  }
+
+  Color _getInitialAvatarBgColor(String identifier) {
+    if (identifier.trim().isEmpty) return const Color(0xFF0284C7);
+    final String clean = identifier.trim().toLowerCase();
+    final List<Color> palette = [
+      const Color(0xFF0284C7), // Blue
+      const Color(0xFF10B981), // Emerald Green
+      const Color(0xFF8B5CF6), // Purple
+      const Color(0xFFD97706), // Amber
+      const Color(0xFFEC4899), // Pink
+      const Color(0xFF06B6D4), // Cyan
+      const Color(0xFFF59E0B), // Orange
+      const Color(0xFF6366F1), // Indigo
+      const Color(0xFF14B8A6), // Teal
+      const Color(0xFFE11D48), // Rose Red
+    ];
+    int hash = 0;
+    for (int i = 0; i < clean.length; i++) {
+      hash = clean.codeUnitAt(i) + ((hash << 5) - hash);
+    }
+    return palette[hash.abs() % palette.length];
   }
 
   String _getGreetingText(bool isEn) {
@@ -476,11 +736,7 @@ class _MainScreenState extends State<MainScreen> {
         ? (isEn ? 'Student' : 'Siswa')
         : cleanName.split(' ').first;
 
-    final bool isDemoUser = widget.userEmail.toLowerCase().contains('demo') ||
-        cleanName.toLowerCase().contains('demo');
-    final String roleBadgeText = isDemoUser
-        ? (isEn ? 'Demo Student' : 'Siswa Demo')
-        : (isEn ? 'Student' : 'Siswa');
+    final String roleBadgeText = isEn ? 'Student' : 'Siswa';
 
     return Container(
       width: double.infinity,
@@ -565,7 +821,7 @@ class _MainScreenState extends State<MainScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        isDemoUser ? Icons.flash_on_rounded : Icons.school_rounded,
+                        Icons.school_rounded,
                         size: 14,
                         color: _isDark ? const Color(0xFF00F0FF) : Colors.white,
                       ),
@@ -879,6 +1135,7 @@ class _MainScreenState extends State<MainScreen> {
         child: Scaffold(
           key: _scaffoldKey,
           backgroundColor: _scaffoldBg,
+          extendBody: true,
           endDrawer: _buildRightProfileDrawer(),
           body: SafeArea(
             child: Column(
@@ -886,7 +1143,7 @@ class _MainScreenState extends State<MainScreen> {
                 _buildTopBar(),
                 Expanded(
                   child: _activeTab == 'lab'
-                      ? const Simulation3DWidget()
+                      ? Simulation3DWidget(isDarkMode: _isDark)
                       : SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                     child: _buildBodyContent(),
@@ -976,6 +1233,14 @@ class _MainScreenState extends State<MainScreen> {
               ),
               const SizedBox(width: 4),
 
+              // Help Icon Button (?) for Students
+              IconButton(
+                tooltip: LanguageController.instance.isEnglish ? 'Interactive Guide' : 'Panduan Interaktif',
+                onPressed: () => _showSpotlightWalkthrough(),
+                icon: Icon(Icons.help_outline_rounded, color: _accentColor, size: 22),
+              ),
+              const SizedBox(width: 4),
+
               InkWell(
                 key: _profileKey,
                 onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
@@ -1034,7 +1299,7 @@ class _MainScreenState extends State<MainScreen> {
     final int completedPoints = _getTotalCompletedPoints();
     final int totalPoints = _getTotalTargetPoints();
 
-    final bool isPassed = _isPostTestCompleted && _postTestScore >= 80;
+    final bool isPassed = _isPostTestCompleted && _postTestScore >= 75;
     final String statusText = !_isPostTestCompleted
         ? (isEn ? 'Not Yet Tested' : 'Belum Ujian')
         : (isPassed ? (isEn ? 'Passed' : 'Lulus') : (isEn ? 'Remedial' : 'Remedial'));
@@ -1097,6 +1362,69 @@ class _MainScreenState extends State<MainScreen> {
 
         const SizedBox(height: 18),
 
+        // KARTU FITUR BARU: SIMULASI AR & AI CONTEXTUAL LEARNING (INFO STATIS HIGHLIGHT FITUR)
+        _cardContainer(
+          borderColor: const Color(0xFF00F0FF).withValues(alpha: 0.5),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00F0FF).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.auto_awesome_rounded,
+                    color: Color(0xFF00F0FF), size: 28),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          isEn ? 'AR & AI Contextual Learning' : 'Simulasi AR & AI',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: _textColor,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF00F0FF).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'NEW',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF00F0FF),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isEn
+                          ? 'Scan real-world objects via AI camera to simulate Stack, Queue, Searching & Sorting.'
+                          : 'Pindai objek fisik sekitar dengan kamera AI untuk mensimulasikan Stack, Queue, Searching & Sorting.',
+                      style: TextStyle(fontSize: 10.5, color: _subTextColor, height: 1.3),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 18),
+
         Container(
           key: _academicStatusKey,
           child: Column(
@@ -1132,13 +1460,8 @@ class _MainScreenState extends State<MainScreen> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            isEn ? 'Score 80' : 'Nilai 80',
+                            isEn ? 'Score 75' : 'Nilai 75',
                             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: _textColor),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            isEn ? 'Min. 4 correct answers' : 'Min. 4 benar per asesmen',
-                            style: TextStyle(fontSize: 9.5, color: _subTextColor),
                           ),
                         ],
                       ),
@@ -1387,13 +1710,8 @@ class _MainScreenState extends State<MainScreen> {
           : (currentModulId.contains('queue') ? '9xpWSCEcMzc' : 'RN4wc9ClciM'));
 
       if (rawVideoUrl.isNotEmpty) {
-        if (rawVideoUrl.contains('v=')) {
-          ytVideoId = rawVideoUrl.split('v=').last.split('&').first;
-        } else if (rawVideoUrl.contains('youtu.be/')) {
-          ytVideoId = rawVideoUrl.split('youtu.be/').last.split('?').first;
-        } else if (!rawVideoUrl.contains('http')) {
-          ytVideoId = rawVideoUrl;
-        }
+        final String parsedId = extractYouTubeVideoId(rawVideoUrl);
+        if (parsedId.isNotEmpty) ytVideoId = parsedId;
       }
 
       return Column(
@@ -1517,8 +1835,8 @@ class _MainScreenState extends State<MainScreen> {
                   const SizedBox(height: 8),
                   Text(
                     isEn
-                        ? 'Assessment exam for this module. Students must achieve passing score 80 to unlock next module.'
-                        : 'Ujian asesmen untuk modul ini. Siswa wajib mencapai KKM 80 untuk membuka modul berikutnya.',
+                        ? 'Assessment exam for this module. Students must achieve passing score 75 to unlock next module.'
+                        : 'Ujian asesmen untuk modul ini. Siswa wajib mencapai KKM 75 untuk membuka modul berikutnya.',
                     style: TextStyle(fontSize: 11, color: _subTextColor),
                   ),
                   const SizedBox(height: 16),
@@ -1619,7 +1937,7 @@ class _MainScreenState extends State<MainScreen> {
           final Color color = m != null ? (m['color'] as Color) : const Color(0xFF00F0FF);
           final IconData icon = m != null ? m['icon'] : Icons.menu_book_rounded;
 
-          final bool isUnlocked = idx == 0 || _isModuleUnlocked(idx);
+          final bool isUnlocked = _isModuleUnlocked(idx);
           final double ratio = _getModuleProgressRatio(moduleId);
 
           return Container(
@@ -1635,37 +1953,25 @@ class _MainScreenState extends State<MainScreen> {
                   return;
                 }
 
-                final prevName = idx - 1 < modules.length
-                    ? (isEn ? (modules[idx - 1]['title_en'] ?? AppText.auto(modules[idx - 1]['title'] ?? '')) : (modules[idx - 1]['title'] ?? 'Pertemuan $idx'))
-                    : listModulMateri[idx - 1].getLocalizedTitle(isEn);
-
-                showDialog(
-                  context: context,
-                  builder: (ctx) => ReadinessDialog(
-                    currentModuleName: prevName,
-                    nextModuleName: dynamicTitle,
-                    isDarkMode: _isDark,
-                    onReady: () {
-                      Navigator.pop(ctx);
-                      setState(() {
-                        _openedMateriIndex = idx;
-                        _selectedSubMenu = 'penjelasan';
-                      });
-                    },
-                    onReview: () {
-                      Navigator.pop(ctx);
-                      setState(() {
-                        _openedMateriIndex = idx - 1;
-                        _selectedSubMenu = 'penjelasan';
-                      });
-                    },
-                  ),
+                _showModuleTransitionDialog(
+                  onContinueNext: () {
+                    setState(() {
+                      _openedMateriIndex = idx;
+                      _selectedSubMenu = 'penjelasan';
+                    });
+                  },
+                  onReviewPrevious: () {
+                    setState(() {
+                      _openedMateriIndex = idx - 1;
+                      _selectedSubMenu = 'penjelasan';
+                    });
+                  },
                 );
               }
                   : () {
                 final reason = !_isPreTestCompleted
                     ? (isEn ? 'Complete the Pre-Test first!' : 'Kerjakan Pre-Test terlebih dahulu!')
-                    : (isEn ? 'Complete previous module and reach score 80!' : 'Selesaikan modul sebelumnya dan capai nilai KKM 80!');
+                    : (isEn ? 'Complete previous module and reach score 75!' : 'Selesaikan modul sebelumnya dan capai nilai KKM 75!');
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text(reason), backgroundColor: Colors.redAccent),
                 );
@@ -1749,9 +2055,9 @@ class _MainScreenState extends State<MainScreen> {
                     Text(
                       allDone
                           ? (_isPostTestCompleted
-                          ? (_postTestScore >= 80
+                          ? (_postTestScore >= 75
                           ? (isEn ? 'Passed ($_postTestScore)' : 'Lulus ($_postTestScore)')
-                          : (isEn ? 'Requires Remedial ($_postTestScore / Target 80)' : 'Perlu Remedial ($_postTestScore / KKM 80)'))
+                          : (isEn ? 'Requires Remedial ($_postTestScore / Target 75)' : 'Perlu Remedial ($_postTestScore / KKM 75)'))
                           : (isEn ? 'Ready to attempt.' : 'Siap dikerjakan.'))
                           : (isEn ? 'Locked. Complete all modules & pass standards.' : 'Terkunci. Selesaikan semua modul & KKM.'),
                       style: TextStyle(fontSize: 10.5, color: _subTextColor),
@@ -1831,56 +2137,47 @@ class _MainScreenState extends State<MainScreen> {
 
   Widget _buildBottomNav() {
     final isEn = LanguageController.instance.isEnglish;
-    return Container(
-      decoration: BoxDecoration(
-        color: _cardBg,
-        border: Border(top: BorderSide(color: _borderColor)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _navItem(Icons.home_outlined, 'Home', 'home', null),
-              _navItem(Icons.menu_book, isEn ? 'Topics' : 'Materi', 'materi', _materiTabKey),
-              _navItem(Icons.science_outlined, isEn ? '3D Lab' : 'Simulasi Lab', 'lab', _labTabKey),
-              _navItem(Icons.analytics_outlined, isEn ? 'Evaluation' : 'Evaluasi', 'evaluasi', _evaluasiTabKey),
-            ],
-          ),
+    // Urutan tab & kunci tetap sama; hanya tampilan yang diganti.
+    const List<String> tabKeys = ['home', 'materi', 'lab', 'evaluasi'];
+    final int currentIndex = tabKeys.indexOf(_activeTab); // -1 jika tab lain
+    return FloatingGlassNavBar(
+      isDark: _isDark,
+      currentIndex: currentIndex,
+      items: [
+        const GlassNavItem(
+          icon: Icons.home_outlined,
+          activeIcon: Icons.home_rounded,
+          label: 'Home',
         ),
-      ),
-    );
-  }
-
-  Widget _navItem(IconData icon, String label, String tabKey, Key? widgetKey) {
-    final isSel = _activeTab == tabKey;
-    final color = isSel ? _accentColor : (_isDark ? Colors.white38 : Colors.black38);
-    return InkWell(
-      key: widgetKey,
-      onTap: () => setState(() {
-        _activeTab = tabKey;
-        if (tabKey == 'materi') {
-          _openedMateriIndex = null;
-          _loadTeacherDynamicMateri();
-        }
-      }),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 20, color: color),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 9,
-              color: color,
-              fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-        ],
-      ),
+        GlassNavItem(
+          icon: Icons.menu_book_outlined,
+          activeIcon: Icons.menu_book_rounded,
+          label: isEn ? 'Topics' : 'Materi',
+          widgetKey: _materiTabKey,
+        ),
+        GlassNavItem(
+          icon: Icons.science_outlined,
+          activeIcon: Icons.science_rounded,
+          label: isEn ? '3D Lab' : 'Simulasi Lab',
+          widgetKey: _labTabKey,
+        ),
+        GlassNavItem(
+          icon: Icons.analytics_outlined,
+          activeIcon: Icons.analytics_rounded,
+          label: isEn ? 'Evaluation' : 'Evaluasi',
+          widgetKey: _evaluasiTabKey,
+        ),
+      ],
+      onTap: (int index) {
+        final String tabKey = tabKeys[index];
+        setState(() {
+          _activeTab = tabKey;
+          if (tabKey == 'materi') {
+            _openedMateriIndex = null;
+            _loadTeacherDynamicMateri();
+          }
+        });
+      },
     );
   }
 }

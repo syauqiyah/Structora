@@ -36,6 +36,7 @@ class TeacherDataHelper {
     String assessment4 = '-',
     String postTestScore = '-',
     String status = 'Belum Ujian',
+    int violations = 0,
   }) async {
     // 1. Simpan ke Cloud Firestore
     await FirebaseService.saveStudentProgress(
@@ -48,6 +49,7 @@ class TeacherDataHelper {
       assessment4: assessment4,
       postTestScore: postTestScore,
       status: status,
+      violations: violations,
     );
 
     // 2. Simpan ke SharedPreferences lokal
@@ -66,6 +68,7 @@ class TeacherDataHelper {
       'assessment4': assessment4,
       'postTest': postTestScore,
       'status': status,
+      'violations': violations,
       'lastActive': DateTime.now().toIso8601String(),
     };
 
@@ -103,6 +106,9 @@ class TeacherDataHelper {
         studentData['preTest'] = preTestScore != '-'
             ? preTestScore
             : (existing['preTest'] ?? '-');
+
+        final int existViolations = int.tryParse((existing['violations'] ?? '0').toString()) ?? 0;
+        studentData['violations'] = violations > 0 ? violations : existViolations;
 
         rawList[i] = jsonEncode(studentData);
         found = true;

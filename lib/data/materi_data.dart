@@ -5,17 +5,50 @@ import '../utils/app_translations.dart';
 extension ModulLocalizationExtension on Map<String, dynamic> {
   String getLocalizedTitle([bool? isEnglish]) {
     final en = isEnglish ?? LanguageController.instance.isEnglish;
-    return en ? (this['title_en'] ?? this['title']) : this['title'];
+    final String titleIndo = (this['title'] ?? this['judulId'] ?? '').toString().trim();
+    if (!en) return titleIndo;
+
+    final String titleEng = (this['title_en'] ?? this['judulEn'] ?? this['titleEn'] ?? '').toString().trim();
+    if (titleEng.isNotEmpty && titleEng.toLowerCase() != titleIndo.toLowerCase()) {
+      return titleEng;
+    }
+    return AppText.auto(titleIndo);
   }
 
   String getLocalizedDesc([bool? isEnglish]) {
     final en = isEnglish ?? LanguageController.instance.isEnglish;
-    return en ? (this['desc_en'] ?? this['desc']) : this['desc'];
+    final String descIndo = (this['desc'] ?? this['deskripsiId'] ?? '').toString().trim();
+    if (!en) return descIndo;
+
+    final String descEng = (this['desc_en'] ?? this['deskripsiEn'] ?? this['descEn'] ?? '').toString().trim();
+    if (descEng.isNotEmpty && descEng.toLowerCase() != descIndo.toLowerCase()) {
+      return descEng;
+    }
+    return AppText.auto(descIndo);
+  }
+
+  String getLocalizedModulName([bool? isEnglish]) {
+    final en = isEnglish ?? LanguageController.instance.isEnglish;
+    final String modulIndo = (this['modul'] ?? this['modulId'] ?? '').toString().trim();
+    if (!en) return modulIndo;
+
+    final String modulEng = (this['modul_en'] ?? this['modulEn'] ?? '').toString().trim();
+    if (modulEng.isNotEmpty && modulEng.toLowerCase() != modulIndo.toLowerCase()) {
+      return modulEng;
+    }
+    return AppText.auto(modulIndo);
   }
 
   String getLocalizedVideoTitle([bool? isEnglish]) {
     final en = isEnglish ?? LanguageController.instance.isEnglish;
-    return en ? (this['videoTitle_en'] ?? this['videoTitle']) : this['videoTitle'];
+    final String vTitleIndo = (this['videoTitle'] ?? 'Video Tutorial Pembelajaran').toString().trim();
+    if (!en) return vTitleIndo;
+
+    final String vTitleEng = (this['videoTitle_en'] ?? '').toString().trim();
+    if (vTitleEng.isNotEmpty && vTitleEng.toLowerCase() != vTitleIndo.toLowerCase()) {
+      return vTitleEng;
+    }
+    return AppText.auto(vTitleIndo);
   }
 
   Map<String, dynamic> getLocalizedPenjelasan([bool? isEnglish]) {
@@ -142,23 +175,33 @@ final List<Map<String, dynamic>> listModulMateri = [
     },
     'pretest': {
       'question': 'Elemen pada Linked List saling terhubung menggunakan...',
+      'question_en': 'Elements in a Linked List are connected to each other using...',
       'options': ['Index angka tetap', 'Pointer / Reference', 'Cache CPU', 'Registry'],
-      'answer': 1
+      'options_en': ['Fixed numerical index', 'Pointer / Reference', 'CPU Cache', 'Registry'],
+      'answer': 1,
+      'explanation': 'Linked List tersusun dari kumpulan node dinamis yang terhubung via pointer.',
+      'explanation_en': 'Linked List consists of dynamic nodes interconnected via pointers.',
     },
     'pretest_en': {
       'question': 'Elements in a Linked List are connected to each other using...',
       'options': ['Fixed numerical index', 'Pointer / Reference', 'CPU Cache', 'Registry'],
-      'answer': 1
+      'answer': 1,
+      'explanation': 'Linked List consists of dynamic nodes interconnected via pointers.',
     },
     'posttest': {
       'question': 'Penunjuk khusus yang menandakan node paling pertama pada Linked List adalah...',
+      'question_en': 'The special pointer indicating the very first node in a Linked List is...',
       'options': ['Tail', 'Head', 'NULL', 'Root'],
-      'answer': 1
+      'options_en': ['Tail', 'Head', 'NULL', 'Root'],
+      'answer': 1,
+      'explanation': 'Head adalah pointer penunjuk simpul paling awal dalam linked list.',
+      'explanation_en': 'Head is the gateway pointer referencing the initial node.',
     },
     'posttest_en': {
       'question': 'The special pointer indicating the very first node in a Linked List is...',
       'options': ['Tail', 'Head', 'NULL', 'Root'],
-      'answer': 1
+      'answer': 1,
+      'explanation': 'Head is the gateway pointer referencing the initial node.',
     },
   },
 
@@ -238,23 +281,33 @@ final List<Map<String, dynamic>> listModulMateri = [
     },
     'pretest': {
       'question': 'Prinsip kerja struktur data Stack adalah...',
+      'question_en': 'The operating principle of a Stack data structure is...',
       'options': ['FIFO (First In First Out)', 'LIFO (Last In First Out)', 'Random Access', 'Prioritas tertinggi'],
-      'answer': 1
+      'options_en': ['FIFO (First In First Out)', 'LIFO (Last In First Out)', 'Random Access', 'Highest Priority'],
+      'answer': 1,
+      'explanation': 'Stack bekerja dengan aturan LIFO: elemen terakhir masuk akan keluar pertama.',
+      'explanation_en': 'Stack operates under LIFO: the last item pushed is the first popped.',
     },
     'pretest_en': {
       'question': 'The operating principle of a Stack data structure is...',
       'options': ['FIFO (First In First Out)', 'LIFO (Last In First Out)', 'Random Access', 'Highest Priority'],
-      'answer': 1
+      'answer': 1,
+      'explanation': 'Stack operates under LIFO: the last item pushed is the first popped.',
     },
     'posttest': {
       'question': 'Operasi untuk melihat elemen teratas Stack tanpa menghapusnya disebut...',
+      'question_en': 'The operation to view the topmost element of a Stack without removing it is called...',
       'options': ['Pop', 'Push', 'Peek', 'Shift'],
-      'answer': 2
+      'options_en': ['Pop', 'Push', 'Peek', 'Shift'],
+      'answer': 2,
+      'explanation': 'Peek (atau Top) melihat nilai data teratas tanpa menghapusnya dari tumpukan.',
+      'explanation_en': 'Peek inspects the topmost element without removing it from stack memory.',
     },
     'posttest_en': {
       'question': 'The operation to view the topmost element of a Stack without removing it is called...',
       'options': ['Pop', 'Push', 'Peek', 'Shift'],
-      'answer': 2
+      'answer': 2,
+      'explanation': 'Peek inspects the topmost element without removing it from stack memory.',
     },
   },
 
@@ -356,23 +409,33 @@ final List<Map<String, dynamic>> listModulMateri = [
     },
     'pretest': {
       'question': 'Prinsip kerja struktur data Queue adalah...',
+      'question_en': 'The core principle of a Queue data structure is...',
       'options': ['FIFO (First In First Out)', 'LIFO (Last In First Out)', 'Binary Traversal', 'Hashing'],
-      'answer': 0
+      'options_en': ['FIFO (First In First Out)', 'LIFO (Last In First Out)', 'Binary Traversal', 'Hashing'],
+      'answer': 0,
+      'explanation': 'Queue menerapkan aturan FIFO: yang pertama datang akan pertama diproses.',
+      'explanation_en': 'Queue adheres to FIFO: the earliest arrival is processed first.',
     },
     'pretest_en': {
       'question': 'The core principle of a Queue data structure is...',
       'options': ['FIFO (First In First Out)', 'LIFO (Last In First Out)', 'Binary Traversal', 'Hashing'],
-      'answer': 0
+      'answer': 0,
+      'explanation': 'Queue adheres to FIFO: the earliest arrival is processed first.',
     },
     'posttest': {
       'question': 'Operasi menghapus data terdepan pada antrean Queue dinamakan...',
+      'question_en': 'The operation that removes the leading element in a Queue is called...',
       'options': ['Enqueue', 'Pop', 'Dequeue', 'Drop'],
-      'answer': 2
+      'options_en': ['Enqueue', 'Pop', 'Dequeue', 'Drop'],
+      'answer': 2,
+      'explanation': 'Dequeue adalah operasi mengeluarkan elemen dari bagian paling depan antrean.',
+      'explanation_en': 'Dequeue removes the frontmost element from the queue.',
     },
     'posttest_en': {
       'question': 'The operation that removes the leading element in a Queue is called...',
       'options': ['Enqueue', 'Pop', 'Dequeue', 'Drop'],
-      'answer': 2
+      'answer': 2,
+      'explanation': 'Dequeue removes the frontmost element from the queue.',
     },
   },
 
@@ -448,23 +511,33 @@ final List<Map<String, dynamic>> listModulMateri = [
     },
     'pretest': {
       'question': 'Syarat utama agar algoritma Binary Search dapat dijalankan adalah...',
+      'question_en': 'The prerequisite for running the Binary Search algorithm is...',
       'options': ['Data harus bertipe string', 'Data harus sudah terurut', 'Data harus berjumlah ganjil', 'Memori harus kosong'],
-      'answer': 1
+      'options_en': ['Data must be of string type', 'Data must already be sorted', 'Data count must be odd', 'Memory must be empty'],
+      'answer': 1,
+      'explanation': 'Binary Search mewajibkan kumpulan data sudah dalam keadaan terurut.',
+      'explanation_en': 'Binary Search strictly requires pre-sorted data to split the search space.',
     },
     'pretest_en': {
       'question': 'The prerequisite for running the Binary Search algorithm is...',
       'options': ['Data must be of string type', 'Data must already be sorted', 'Data count must be odd', 'Memory must be empty'],
-      'answer': 1
+      'answer': 1,
+      'explanation': 'Binary Search strictly requires pre-sorted data to split the search space.',
     },
     'posttest': {
       'question': 'Algoritma sorting yang menyeleksi elemen terkecil lalu menaruhnya ke posisi yang tepat adalah...',
+      'question_en': 'The sorting algorithm that selects the minimum element and places it into the target position is...',
       'options': ['Bubble Sort', 'Linear Search', 'Selection Sort', 'Binary Search'],
-      'answer': 2
+      'options_en': ['Bubble Sort', 'Linear Search', 'Selection Sort', 'Binary Search'],
+      'answer': 2,
+      'explanation': 'Selection Sort memilih elemen nilai terkecil lalu menukarnya ke posisi target.',
+      'explanation_en': 'Selection Sort isolates the minimum value and swaps it into the target slot.',
     },
     'posttest_en': {
       'question': 'The sorting algorithm that selects the minimum element and places it into the target position is...',
       'options': ['Bubble Sort', 'Linear Search', 'Selection Sort', 'Binary Search'],
-      'answer': 2
+      'answer': 2,
+      'explanation': 'Selection Sort isolates the minimum value and swaps it into the target slot.',
     },
   },
 ];

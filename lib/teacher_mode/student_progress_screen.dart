@@ -69,18 +69,18 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
     final int postVal = _parseScore(postTest);
     final bool isImproving = isCompleted && postVal >= preVal;
 
-    // Evaluasi Asesmen mana yang perlu remedial (di bawah KKM 80)
+    // Evaluasi Asesmen mana yang perlu remedial (di bawah KKM 75)
     final List<String> weakModules = [];
-    if (int.tryParse(a1) != null && int.parse(a1) < 80) {
+    if (int.tryParse(a1) != null && int.parse(a1) < 75) {
       weakModules.add(isEn ? 'Module 1 (Linked List)' : 'Modul 1 (Linked List)');
     }
-    if (int.tryParse(a2) != null && int.parse(a2) < 80) {
+    if (int.tryParse(a2) != null && int.parse(a2) < 75) {
       weakModules.add(isEn ? 'Module 2 (Stack)' : 'Modul 2 (Stack)');
     }
-    if (int.tryParse(a3) != null && int.parse(a3) < 80) {
+    if (int.tryParse(a3) != null && int.parse(a3) < 75) {
       weakModules.add(isEn ? 'Module 3 (Queue)' : 'Modul 3 (Queue)');
     }
-    if (int.tryParse(a4) != null && int.parse(a4) < 80) {
+    if (int.tryParse(a4) != null && int.parse(a4) < 75) {
       weakModules.add(isEn ? 'Module 4 (Searching & Sorting)' : 'Modul 4 (Searching & Sorting)');
     }
 
@@ -295,8 +295,8 @@ class _StudentDetailScreenState extends State<StudentDetailScreen> {
                     const SizedBox(height: 8),
                     Text(
                       isEn
-                          ? '• Areas for Improvement: Needs reinforcement/remedial on ${weakModules.join(", ")} as assessment score is below standard (Passing Grade: 80).'
-                          : '• Bagian yang Kurang: Perlu penguatan/remedial pada ${weakModules.join(", ")} karena skor asesmen di bawah standar (KKM 80).',
+                          ? '• Areas for Improvement: Needs reinforcement/remedial on ${weakModules.join(", ")} as assessment score is below standard (Passing Grade: 75).'
+                          : '• Bagian yang Kurang: Perlu penguatan/remedial pada ${weakModules.join(", ")} karena skor asesmen di bawah standar (KKM 75).',
                       style: const TextStyle(fontSize: 12, color: Colors.orangeAccent, height: 1.5),
                     ),
                   ],

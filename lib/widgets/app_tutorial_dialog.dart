@@ -4,11 +4,13 @@ import '../utils/app_translations.dart';
 class AppTutorialDialog extends StatefulWidget {
   final bool isDarkMode;
   final VoidCallback onFinish;
+  final bool isTeacher;
 
   const AppTutorialDialog({
     super.key,
     required this.isDarkMode,
     required this.onFinish,
+    this.isTeacher = false,
   });
 
   @override
@@ -29,44 +31,91 @@ class _AppTutorialDialogState extends State<AppTutorialDialog> {
   Widget build(BuildContext context) {
     final bool isEn = LanguageController.instance.isEnglish;
 
-    final List<Map<String, dynamic>> features = [
-      {
-        'tag': isEn ? 'FEATURE 1' : 'FITUR 1',
-        'title': isEn ? 'Interactive Modules & Video 📚' : 'Modul Interaktif & Video 📚',
-        'desc': isEn
-            ? 'Learn data structure concepts from Linked Lists to Sorting. Includes real-life analogies and animated video concepts for effortless understanding.'
-            : 'Pelajari konsep struktur data mulai dari Linked List hingga Sorting. Dilengkapi analogi kehidupan nyata serta video animasi konsep agar materi mudah dipahami.',
-        'icon': Icons.menu_book_rounded,
-        'color': const Color(0xFF00F0FF),
-      },
-      {
-        'tag': isEn ? 'FEATURE 2' : 'FITUR 2',
-        'title': isEn ? 'Virtual 3D Lab Simulation 🧪' : 'Simulasi Lab 3D Virtual 🧪',
-        'desc': isEn
-            ? 'Interactive 3D visualization feature on the bottom nav tab. Experiment with dynamic pointers, Stack LIFO, and Queue FIFO in real time.'
-            : 'Fitur visualisasi interaktif di tab navigasi bawah. Kamu dapat bereksperimen melihat jalannya pointer, tumpukan LIFO pada Stack, dan antrean FIFO pada Queue secara langsung.',
-        'icon': Icons.science_outlined,
-        'color': const Color(0xFF8B5CF6),
-      },
-      {
-        'tag': isEn ? 'FEATURE 3' : 'FITUR 3',
-        'title': isEn ? 'Assessment & Standard KKM 80 🔒' : 'Asesmen & Standar KKM 80 🔒',
-        'desc': isEn
-            ? 'Test your understanding on each module. Assessments enforce sequential unlocking, and you must score at least 80 to unlock the next module.'
-            : 'Uji pemahamanmu pada setiap modul. Asesmen menerapkan sistem terkunci berurutan dan kamu wajib meraih nilai KKM minimal 80 untuk membuka modul berikutnya.',
-        'icon': Icons.security_rounded,
-        'color': const Color(0xFFD97706),
-      },
-      {
-        'tag': isEn ? 'FEATURE 4' : 'FITUR 4',
-        'title': isEn ? 'Evaluation Score Dashboard 📊' : 'Dashboard Evaluasi Nilai 📊',
-        'desc': isEn
-            ? 'Track your score progression graph on the Evaluation tab. Compare initial Pre-Test scores with module assessments and final Post-Test graduation.'
-            : 'Pantau grafik perkembangan belajarmu di tab Evaluasi. Bandingkan skor Pre-Test awal dengan capaian asesmen hingga kelulusan Post-Test akhir.',
-        'icon': Icons.analytics_outlined,
-        'color': const Color(0xFF10B981),
-      },
-    ];
+    final List<Map<String, dynamic>> features = widget.isTeacher
+        ? [
+            {
+              'tag': isEn ? 'TEACHER 1' : 'GURU 1',
+              'title': isEn
+                  ? 'Real-Time Student Analytics 📊'
+                  : 'Monitoring Progres Siswa 📊',
+              'desc': isEn
+                  ? 'Track student progress, Pre-Test vs Post-Test score gains, and diagnostic notes for weak topics in real time.'
+                  : 'Pantau perkembangan nilai Pre-Test, Post-Test, selisih peningkatan poin, serta analisis diagnostik kelemahan siswa secara real-time.',
+              'icon': Icons.analytics_outlined,
+              'color': const Color(0xFF00F0FF),
+            },
+            {
+              'tag': isEn ? 'TEACHER 2' : 'GURU 2',
+              'title': isEn
+                  ? 'Manage Modules & Assessments 📝'
+                  : 'Kelola Materi & Bank Soal 📝',
+              'desc': isEn
+                  ? 'Upload or edit learning materials, video tutorial links, and custom module exam question packages easily.'
+                  : 'Upload atau edit materi pembelajaran, tautan video tutorial, serta paket soal asesmen ujian modul dengan mudah.',
+              'icon': Icons.menu_book_rounded,
+              'color': const Color(0xFF8B5CF6),
+            },
+            {
+              'tag': isEn ? 'TEACHER 3' : 'GURU 3',
+              'title': isEn
+                  ? 'Auto-Translate ML Kit 🌐'
+                  : 'Penerjemahan Otomatis ML Kit 🌐',
+              'desc': isEn
+                  ? 'All newly added materials and question items are automatically translated to English using google_mlkit_translation.'
+                  : 'Seluruh materi dan butir soal baru yang ditambahkan guru otomatis diterjemahkan ke Bahasa Inggris menggunakan ML Kit.',
+              'icon': Icons.g_translate_rounded,
+              'color': const Color(0xFFD97706),
+            },
+            {
+              'tag': isEn ? 'TEACHER 4' : 'GURU 4',
+              'title': isEn
+                  ? 'Quick Import Question Scripts ⚡'
+                  : 'Quick Import Naskah Soal ⚡',
+              'desc': isEn
+                  ? 'Copy-paste question scripts from Word or PDF documents directly into the editor to generate question packages automatically.'
+                  : 'Salin-tempel naskah soal dari dokumen Word atau PDF ke dalam editor untuk mengimpor paket soal secara instan.',
+              'icon': Icons.bolt_rounded,
+              'color': const Color(0xFF10B981),
+            },
+          ]
+        : [
+            {
+              'tag': isEn ? 'FEATURE 1' : 'FITUR 1',
+              'title': isEn ? 'Interactive Modules & Video 📚' : 'Modul Interaktif & Video 📚',
+              'desc': isEn
+                  ? 'Learn data structure concepts from Linked Lists to Sorting. Includes real-life analogies and animated video concepts for effortless understanding.'
+                  : 'Pelajari konsep struktur data mulai dari Linked List hingga Sorting. Dilengkapi analogi kehidupan nyata serta video animasi konsep agar materi mudah dipahami.',
+              'icon': Icons.menu_book_rounded,
+              'color': const Color(0xFF00F0FF),
+            },
+            {
+              'tag': isEn ? 'FEATURE 2' : 'FITUR 2',
+              'title': isEn ? 'Virtual 3D Lab Simulation 🧪' : 'Simulasi Lab 3D Virtual 🧪',
+              'desc': isEn
+                  ? 'Interactive 3D visualization feature on the bottom nav tab. Experiment with dynamic pointers, Stack LIFO, and Queue FIFO in real time.'
+                  : 'Fitur visualisasi interaktif di tab navigasi bawah. Kamu dapat bereksperimen melihat jalannya pointer, tumpukan LIFO pada Stack, dan antrean FIFO pada Queue secara langsung.',
+              'icon': Icons.science_outlined,
+              'color': const Color(0xFF8B5CF6),
+            },
+            {
+              'tag': isEn ? 'FEATURE 3' : 'FITUR 3',
+              'title': isEn ? 'Assessment & Standard KKM 75 🔒' : 'Asesmen & Standar KKM 75 🔒',
+              'desc': isEn
+                  ? 'Test your understanding on each module. Assessments enforce sequential unlocking, and you must score at least 75 to unlock the next module.'
+                  : 'Uji pemahamanmu pada setiap modul. Asesmen menerapkan sistem terkunci berurutan dan kamu wajib meraih nilai KKM minimal 75 untuk membuka modul berikutnya.',
+              'icon': Icons.security_rounded,
+              'color': const Color(0xFFD97706),
+            },
+            {
+              'tag': isEn ? 'FEATURE 4' : 'FITUR 4',
+              'title': isEn ? 'Evaluation Score Dashboard 📊' : 'Dashboard Evaluasi Nilai 📊',
+              'desc': isEn
+                  ? 'Track your score progression graph on the Evaluation tab. Compare initial Pre-Test scores with module assessments and final Post-Test graduation.'
+                  : 'Pantau grafik perkembangan belajarmu di tab Evaluasi. Bandingkan skor Pre-Test awal dengan capaian asesmen hingga kelulusan Post-Test akhir.',
+              'icon': Icons.analytics_outlined,
+              'color': const Color(0xFF10B981),
+            },
+          ];
 
     final bgColor = widget.isDarkMode ? const Color(0xFF0F172A) : Colors.white;
     final textColor = widget.isDarkMode ? Colors.white : const Color(0xFF0F172A);

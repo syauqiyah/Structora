@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/materi_data.dart';
 import '../data/quiz_data.dart';
+import '../services/auto_translate_service.dart';
+import '../services/firebase_service.dart';
 import '../utils/app_translations.dart';
 import 'learning_progress_chart.dart';
 
@@ -50,13 +52,16 @@ class _EvaluationTabWidgetState extends State<EvaluationTabWidget> {
 
   Future<void> _loadEvaluationData() async {
     final prefs = await SharedPreferences.getInstance();
+    final String email = prefs.getString('userEmail') ?? '';
     Map<String, int> scores = {};
     for (var m in listModulMateri) {
       final mId = m['id'];
-      scores[mId] = prefs.getInt('score_$mId') ?? 0;
+      final kScore = FirebaseService.getUserKey(email, 'score_$mId');
+      scores[mId] = prefs.getInt(kScore) ?? 0;
     }
 
-    final diagRaw = prefs.getString('posttest_wrong_diagnostics');
+    final kDiag = FirebaseService.getUserKey(email, 'posttest_wrong_diagnostics');
+    final diagRaw = prefs.getString(kDiag);
     Map<String, int> diagnostics = {};
     if (diagRaw != null) {
       final decoded = jsonDecode(diagRaw) as Map<String, dynamic>;
@@ -71,6 +76,105 @@ class _EvaluationTabWidgetState extends State<EvaluationTabWidget> {
         _postTestDiagnostics = diagnostics;
       });
     }
+  }
+
+  Map<String, dynamic> _findQuizAnswersAndQuestions(
+      SharedPreferences prefs, String quizType) {
+    final String cleanType =
+        quizType.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    Map<String, dynamic> userAnswers = {};
+    List<dynamic> questions = [];
+
+    List<String> keyCandidates = [
+      quizType,
+      cleanType,
+    ];
+    if (quizType == 'pretest' || cleanType.contains('pretest')) {
+      keyCandidates.addAll(
+          ['pretest', 'pre_test', 'pre-test', 'pre_test_kemampuan_awal']);
+    } else if (quizType == 'posttest' || cleanType.contains('posttest')) {
+      keyCandidates.addAll(
+          ['posttest', 'post_test', 'post-test', 'post_test_evaluasi_akhir']);
+    } else if (quizType.startsWith('asesmen_') || cleanType.contains('asesmen')) {
+      final modId = quizType.replaceFirst('asesmen_', '');
+      final cleanMod = modId.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      keyCandidates.addAll([
+        'asesmen_$modId',
+        'asesmen_$cleanMod',
+        'asesmen_modul_$cleanMod',
+        'asesmen_$cleanType',
+        modId,
+        cleanMod,
+      ]);
+    }
+
+    String? matchedAnswersRaw;
+    String? matchedShuffledRaw;
+
+    for (var cand in keyCandidates) {
+      final String candNorm =
+          cand.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      for (var k in prefs.getKeys()) {
+        final kNorm = k.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+        if (kNorm.startsWith('answers') && kNorm.contains(candNorm)) {
+          final String? val = prefs.getString(k);
+          if (val != null && val.isNotEmpty && val != '{}') {
+            matchedAnswersRaw = val;
+            break;
+          }
+        }
+      }
+      if (matchedAnswersRaw != null) break;
+    }
+
+    matchedAnswersRaw ??= prefs.getString('answers_$quizType') ??
+        prefs.getString('answers_$cleanType');
+
+    if (matchedAnswersRaw != null && matchedAnswersRaw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(matchedAnswersRaw);
+        if (decoded is Map) {
+          userAnswers = Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {}
+    }
+
+    for (var cand in keyCandidates) {
+      final String candNorm =
+          cand.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      for (var k in prefs.getKeys()) {
+        final kNorm = k.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+        if (kNorm.contains('shuffledquestions') && kNorm.contains(candNorm)) {
+          final String? val = prefs.getString(k);
+          if (val != null && val.isNotEmpty && val != '[]') {
+            matchedShuffledRaw = val;
+            break;
+          }
+        }
+      }
+      if (matchedShuffledRaw != null) break;
+    }
+
+    matchedShuffledRaw ??= prefs.getString('shuffled_questions_$quizType') ??
+        prefs.getString('shuffled_questions_$cleanType');
+
+    if (matchedShuffledRaw != null && matchedShuffledRaw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(matchedShuffledRaw);
+        if (decoded is List && decoded.isNotEmpty) {
+          questions = List.from(decoded);
+        }
+      } catch (_) {}
+    }
+
+    if (questions.isEmpty) {
+      questions = List.from(getQuestionsForType(quizType));
+    }
+
+    return {
+      'userAnswers': userAnswers,
+      'questions': questions,
+    };
   }
 
   void _showReviewDialog(
@@ -88,9 +192,13 @@ class _EvaluationTabWidgetState extends State<EvaluationTabWidget> {
     widget.isDarkMode ? const Color(0xFF00F0FF) : const Color(0xFF0284C7);
 
     final prefs = await SharedPreferences.getInstance();
-    final rawAnswers = prefs.getString('answers_$quizType');
+    final Map<String, dynamic> resultData =
+        _findQuizAnswersAndQuestions(prefs, quizType);
+    final Map<String, dynamic> userAnswers =
+        resultData['userAnswers'] as Map<String, dynamic>;
+    List<dynamic> questions = resultData['questions'] as List<dynamic>;
 
-    if (rawAnswers == null) {
+    if (questions.isEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -103,17 +211,19 @@ class _EvaluationTabWidgetState extends State<EvaluationTabWidget> {
       return;
     }
 
-    final Map<String, dynamic> userAnswers = jsonDecode(rawAnswers);
-
-    final rawShuffledQuestions =
-    prefs.getString('shuffled_questions_$quizType');
-    final List<dynamic> questions = rawShuffledQuestions != null
-        ? jsonDecode(rawShuffledQuestions)
-        : getQuestionsForType(quizType);
-
     const prefixes = ['A', 'B', 'C', 'D', 'E'];
 
     if (!context.mounted) return;
+
+    String cleanTitle = title;
+    if (cleanTitle.startsWith('Pembahasan: ')) {
+      cleanTitle = cleanTitle.substring(12);
+    } else if (cleanTitle.startsWith('Discussion: ')) {
+      cleanTitle = cleanTitle.substring(12);
+    }
+    final String displayTitle = cleanTitle;
+
+    bool hasTriggeredBgTranslation = false;
 
     showModalBottomSheet(
       context: context,
@@ -123,181 +233,207 @@ class _EvaluationTabWidgetState extends State<EvaluationTabWidget> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
-        return SafeArea(
-          top: false,
-          child: Container(
-            height: MediaQuery.of(context).size.height * 0.88,
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        isEn ? 'Discussion: $title' : 'Pembahasan: $title',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.close, color: textColor),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
-                Divider(color: borderColor),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: questions.length,
-                    itemBuilder: (context, qIdx) {
-                      final q = Map<String, dynamic>.from(questions[qIdx]);
-                      final int? chosen = userAnswers[qIdx.toString()];
-                      final int correct = q['answer'];
-                      final bool isCorrect = chosen == correct;
-                      final options = q.getLocalizedOptions(isEn);
-                      final String explanation = q.getLocalizedExplanation(isEn);
-                      final String questionText = q.getLocalizedQuestion(isEn);
+        List<dynamic> sheetQuestions = List.from(questions);
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 14),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: boxInnerBg,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isCorrect
-                                ? Colors.green.withValues(alpha: 0.5)
-                                : Colors.redAccent.withValues(alpha: 0.5),
+        return StatefulBuilder(
+          builder: (sheetCtx, setSheetState) {
+            if (isEn && sheetQuestions.isNotEmpty && !hasTriggeredBgTranslation) {
+              hasTriggeredBgTranslation = true;
+              // Background, batches of 5, no timeout; modal is already open.
+              AutoTranslateService.instance.translatePending(
+                sheetQuestions,
+                batchSize: 5,
+                onBatch: (updates) {
+                  if (!sheetCtx.mounted) return;
+                  setSheetState(() {
+                    updates.forEach((i, v) {
+                      if (i < sheetQuestions.length) sheetQuestions[i] = v;
+                    });
+                  });
+                },
+              );
+            }
+
+            return SafeArea(
+              top: false,
+              child: Container(
+                height: MediaQuery.of(context).size.height * 0.88,
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: AutoTranslateText(
+                            displayTitle,
+                            prefix: isEn ? 'Discussion: ' : 'Pembahasan: ',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
                           ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                        IconButton(
+                          icon: Icon(Icons.close, color: textColor),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    Divider(color: borderColor),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: sheetQuestions.length,
+                        itemBuilder: (context, qIdx) {
+                          final q = Map<String, dynamic>.from(sheetQuestions[qIdx]);
+                          final int? chosen = userAnswers[qIdx.toString()];
+                          final int correct = q['answer'] ?? q['answerIndex'] ?? 0;
+                          final bool isCorrect = chosen == correct;
+
+                          String questionText = q.getLocalizedQuestion(isEn);
+                          List<String> options = q.getLocalizedOptions(isEn);
+                          String explanation = q.getLocalizedExplanation(isEn);
+
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: boxInnerBg,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isCorrect
+                                    ? Colors.green.withValues(alpha: 0.5)
+                                    : Colors.redAccent.withValues(alpha: 0.5),
+                              ),
+                            ),
+                            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(
-                                  isCorrect ? Icons.check_circle : Icons.cancel,
-                                  size: 18,
-                                  color: isCorrect
-                                      ? Colors.green
-                                      : Colors.redAccent,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    '${qIdx + 1}. $questionText',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: textColor,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            ...List.generate(options.length, (optIdx) {
-                              final isUserChoice = chosen == optIdx;
-                              final isKeyAnswer = correct == optIdx;
-
-                              Color optColor = subTextColor;
-                              FontWeight optWeight = FontWeight.normal;
-                              String note = '';
-
-                              if (isKeyAnswer) {
-                                optColor = Colors.green;
-                                optWeight = FontWeight.bold;
-                                note = isEn
-                                    ? ' ✓ (Answer Key)'
-                                    : ' ✓ (Kunci Jawaban)';
-                              }
-                              if (isUserChoice && !isCorrect) {
-                                optColor = Colors.redAccent;
-                                optWeight = FontWeight.bold;
-                                note = isEn
-                                    ? ' ✗ (Your Answer)'
-                                    : ' ✗ (Jawaban Kamu)';
-                              } else if (isUserChoice && isCorrect) {
-                                note = isEn
-                                    ? ' (Your Answer - Correct)'
-                                    : ' (Jawaban Kamu - Benar)';
-                              }
-
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 3),
-                                child: Text(
-                                  '${prefixes[optIdx]}. ${options[optIdx]}$note',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: optColor,
-                                    fontWeight: optWeight,
-                                  ),
-                                ),
-                              );
-                            }),
-                            if (explanation.isNotEmpty) ...[
-                              const SizedBox(height: 10),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(9),
-                                decoration: BoxDecoration(
-                                  color: accentColor.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: accentColor.withValues(alpha: 0.25),
-                                  ),
-                                ),
-                                child: Row(
+                                Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Icon(
-                                      Icons.lightbulb_outline,
-                                      size: 14,
-                                      color: accentColor,
+                                      isCorrect ? Icons.check_circle : Icons.cancel,
+                                      size: 18,
+                                      color: isCorrect
+                                          ? Colors.green
+                                          : Colors.redAccent,
                                     ),
-                                    const SizedBox(width: 6),
+                                    const SizedBox(width: 8),
                                     Expanded(
-                                      child: RichText(
-                                        text: TextSpan(
-                                          style: TextStyle(
-                                            fontSize: 10.5,
-                                            color: textColor,
-                                            height: 1.4,
-                                          ),
-                                          children: [
-                                            TextSpan(
-                                              text: isEn
-                                                  ? 'Explanation: '
-                                                  : 'Pembahasan: ',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                color: accentColor,
-                                              ),
-                                            ),
-                                            TextSpan(text: explanation),
-                                          ],
+                                      child: Text(
+                                        '${qIdx + 1}. $questionText',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: textColor,
                                         ),
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                                const SizedBox(height: 8),
+                                ...List.generate(options.length, (optIdx) {
+                                  final isUserChoice = chosen == optIdx;
+                                  final isKeyAnswer = correct == optIdx;
+
+                                  Color optColor = subTextColor;
+                                  FontWeight optWeight = FontWeight.normal;
+                                  String note = '';
+
+                                  if (isKeyAnswer) {
+                                    optColor = Colors.green;
+                                    optWeight = FontWeight.bold;
+                                    note = isEn
+                                        ? ' ✓ (Answer Key)'
+                                        : ' ✓ (Kunci Jawaban)';
+                                  }
+                                  if (isUserChoice && !isCorrect) {
+                                    optColor = Colors.redAccent;
+                                    optWeight = FontWeight.bold;
+                                    note = isEn
+                                        ? ' ✗ (Your Answer)'
+                                        : ' ✗ (Jawaban Kamu)';
+                                  } else if (isUserChoice && isCorrect) {
+                                    note = isEn
+                                        ? ' (Your Answer - Correct)'
+                                        : ' (Jawaban Kamu - Benar)';
+                                  }
+
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 3),
+                                    child: Text(
+                                      '${prefixes[optIdx]}. ${options[optIdx]}$note',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: optColor,
+                                        fontWeight: optWeight,
+                                      ),
+                                    ),
+                                  );
+                                }),
+                                if (explanation.isNotEmpty) ...[
+                                  const SizedBox(height: 10),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(9),
+                                    decoration: BoxDecoration(
+                                      color: accentColor.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: accentColor.withValues(alpha: 0.25),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(
+                                          Icons.lightbulb_outline,
+                                          size: 14,
+                                          color: accentColor,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: RichText(
+                                            text: TextSpan(
+                                              style: TextStyle(
+                                                fontSize: 10.5,
+                                                color: textColor,
+                                                height: 1.4,
+                                              ),
+                                              children: [
+                                                TextSpan(
+                                                  text: isEn
+                                                      ? 'Explanation: '
+                                                      : 'Pembahasan: ',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: accentColor,
+                                                  ),
+                                                ),
+                                                TextSpan(text: explanation),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -317,11 +453,11 @@ class _EvaluationTabWidgetState extends State<EvaluationTabWidget> {
 
     final int scoreDiff = widget.postTestScore - widget.preTestScore;
 
-    // Menentukan Status & Badge Kelulusan berdasarkan KKM 80
+    // Menentukan Status & Badge Kelulusan berdasarkan KKM 75
     String badgeTitle = isEn ? 'Not Yet Graduated' : 'Belum Lulus';
     String badgeDesc = isEn
-        ? 'Complete all learning modules and score at least 80 on the Post-Test.'
-        : 'Selesaikan seluruh materi modul dan capai nilai minimal 80 pada Post-Test.';
+        ? 'Complete all learning modules and score at least 75 on the Post-Test.'
+        : 'Selesaikan seluruh materi modul dan capai nilai minimal 75 pada Post-Test.';
     Color badgeColor = subTextColor;
     IconData badgeIcon = Icons.hourglass_empty;
 
@@ -335,22 +471,22 @@ class _EvaluationTabWidgetState extends State<EvaluationTabWidget> {
             : 'Luar biasa! Pemahaman konsep struktur data kamu telah sangat tuntas.';
         badgeColor = const Color(0xFF10B981);
         badgeIcon = Icons.emoji_events;
-      } else if (widget.postTestScore >= 80) {
+      } else if (widget.postTestScore >= 75) {
         badgeTitle = isEn
-            ? 'Competent (Passed Standard 80)'
-            : 'Kompeten (Lulus KKM)';
+            ? 'Competent (Passed Standard 75)'
+            : 'Kompeten (Lulus KKM 75)';
         badgeDesc = isEn
-            ? 'Congratulations! You achieved the academic passing standard (KKM 80).'
-            : 'Selamat! Kamu telah mencapai standar kompetensi kelulusan (KKM 80).';
+            ? 'Congratulations! You achieved the academic passing standard (KKM 75).'
+            : 'Selamat! Kamu telah mencapai standar kompetensi kelulusan (KKM 75).';
         badgeColor = const Color(0xFF0284C7);
         badgeIcon = Icons.verified;
       } else {
         badgeTitle = isEn
-            ? 'Needs Remedial (Below 80)'
-            : 'Perlu Remedial (Belum Capai KKM 80)';
+            ? 'Needs Remedial (Below 75)'
+            : 'Perlu Remedial (Belum Capai KKM 75)';
         badgeDesc = isEn
-            ? 'Your score is below 80. Review the suggested modules below.'
-            : 'Skor kamu belum memenuhi KKM 80. Pelajari materi yang disarankan di bawah.';
+            ? 'Your score is below 75. Review the suggested modules below.'
+            : 'Skor kamu belum memenuhi KKM 75. Pelajari materi yang disarankan di bawah.';
         badgeColor = const Color(0xFFD97706);
         badgeIcon = Icons.school;
       }
@@ -359,7 +495,7 @@ class _EvaluationTabWidgetState extends State<EvaluationTabWidget> {
     // Ekstraksi Materi Terlemah dari Hasil Post-Test
     List<MapEntry<String, int>> weakModules = [];
     if (widget.isPostTestCompleted &&
-        widget.postTestScore < 80 &&
+        widget.postTestScore < 75 &&
         _postTestDiagnostics.isNotEmpty) {
       weakModules = _postTestDiagnostics.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
@@ -526,11 +662,17 @@ class _EvaluationTabWidgetState extends State<EvaluationTabWidget> {
                       const SizedBox(height: 6),
                       ...weakModules.map((entry) {
                         String modTitle = entry.key;
-                        if (entry.key == 'linkedlist') modTitle = 'Linked List';
-                        if (entry.key == 'stack') modTitle = 'Stack';
-                        if (entry.key == 'queue') modTitle = 'Queue';
+                        if (entry.key == 'linkedlist') {
+                          modTitle = isEn ? 'Module 1 (Linked List)' : 'Modul 1 (Linked List)';
+                        }
+                        if (entry.key == 'stack') {
+                          modTitle = isEn ? 'Module 2 (Stack)' : 'Modul 2 (Stack)';
+                        }
+                        if (entry.key == 'queue') {
+                          modTitle = isEn ? 'Module 3 (Queue)' : 'Modul 3 (Queue)';
+                        }
                         if (entry.key == 'searching_sorting') {
-                          modTitle = 'Searching & Sorting';
+                          modTitle = isEn ? 'Module 4 (Searching & Sorting)' : 'Modul 4 (Searching & Sorting)';
                         }
 
                         return Padding(
@@ -626,7 +768,7 @@ class _EvaluationTabWidgetState extends State<EvaluationTabWidget> {
           final int score = _moduleScores[mId] ?? 0;
           final bool isDone =
               widget.completedSteps.contains('${mId}_asesmen') || score > 0;
-          final bool isPassed = score >= 80;
+          final bool isPassed = score >= 75;
           final String moduleTitle = m.getLocalizedTitle(isEn);
 
           return _buildReviewRow(
@@ -638,7 +780,7 @@ class _EvaluationTabWidgetState extends State<EvaluationTabWidget> {
             title: isEn ? 'Assessment: $moduleTitle' : 'Asesmen: $moduleTitle',
             isDone: isDone,
             isPassed: isPassed,
-            kkmTarget: 80,
+            kkmTarget: 75,
             score: score,
             color: m['color'],
             onTap: () => _showReviewDialog(
@@ -661,8 +803,8 @@ class _EvaluationTabWidgetState extends State<EvaluationTabWidget> {
               ? 'Post-Test Final Assessment'
               : 'Post-Test Evaluasi Akhir',
           isDone: widget.isPostTestCompleted,
-          isPassed: widget.postTestScore >= 80,
-          kkmTarget: 80,
+          isPassed: widget.postTestScore >= 75,
+          kkmTarget: 75,
           score: widget.postTestScore,
           color: const Color(0xFFE11D48),
           onTap: () => _showReviewDialog(

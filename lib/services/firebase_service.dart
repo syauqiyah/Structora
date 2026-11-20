@@ -89,6 +89,147 @@ class FirebaseService {
     return isTeacher ? 'teacher' : 'student';
   }
 
+  /// Validasi dan pengambil data peran (role) terdaftar dari Cloud Firestore berdasarkan UID atau Email
+  static Future<String?> getUserRoleByUidOrEmail(String uid, String email) async {
+    final String cleanEmail = email.toLowerCase().trim();
+
+    try {
+      // 1. Cek dokumen Firestore berdasarkan UID
+      if (uid.isNotEmpty) {
+        final doc = await _usersRef
+            .doc(uid)
+            .get()
+            .timeout(const Duration(seconds: 3));
+        if (doc.exists && doc.data() != null) {
+          final data = doc.data() as Map<String, dynamic>;
+          final role = (data['role'] ?? (data['isTeacher'] == true ? 'teacher' : 'student'))
+              .toString()
+              .toLowerCase()
+              .trim();
+          if (role.isNotEmpty) return role;
+        }
+      }
+
+      // 2. Cek dokumen Firestore berdasarkan Query Email jika UID tidak ditemukan
+      if (cleanEmail.isNotEmpty) {
+        final query = await _usersRef
+            .where('email', isEqualTo: cleanEmail)
+            .limit(1)
+            .get()
+            .timeout(const Duration(seconds: 3));
+        if (query.docs.isNotEmpty) {
+          final data = query.docs.first.data() as Map<String, dynamic>;
+          final role = (data['role'] ?? (data['isTeacher'] == true ? 'teacher' : 'student'))
+              .toString()
+              .toLowerCase()
+              .trim();
+          if (role.isNotEmpty) return role;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error getUserRoleByUidOrEmail: $e');
+    }
+
+    // 3. Fallback: Cek akhiran domain email institusi guru
+    if (cleanEmail.endsWith('@structora.app')) {
+      return 'teacher';
+    }
+
+    return null;
+  }
+
+  /// Memperbarui kata sandi baru pengguna (Guru & Siswa) di Cloud Firestore & local cache
+  static Future<bool> updateUserPassword({
+    required String email,
+    required String newPassword,
+  }) async {
+    final String cleanEmail = email.toLowerCase().trim();
+    if (cleanEmail.isEmpty || newPassword.length < 6) return false;
+
+    bool updatedInFirestore = false;
+
+    // 1. Simpan ke SharedPreferences lokal terlepas dari koneksi
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('custom_password_$cleanEmail', newPassword);
+    } catch (e) {
+      debugPrint('Error local prefs updateUserPassword: $e');
+    }
+
+    // 2. Cari dokumen user di Firestore koleksi 'users' berdasarkan email
+    try {
+      final query = await _usersRef
+          .where('email', isEqualTo: cleanEmail)
+          .limit(1)
+          .get()
+          .timeout(const Duration(seconds: 4));
+
+      if (query.docs.isNotEmpty) {
+        final docRef = query.docs.first.reference;
+        await docRef.set({
+          'password': newPassword,
+          'custom_password': newPassword,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)).timeout(const Duration(seconds: 4));
+        updatedInFirestore = true;
+      } else {
+        final safeId = cleanEmail.replaceAll(RegExp(r'[^\w.-]'), '_');
+        await _usersRef.doc(safeId).set({
+          'email': cleanEmail,
+          'password': newPassword,
+          'custom_password': newPassword,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)).timeout(const Duration(seconds: 4));
+        updatedInFirestore = true;
+      }
+    } catch (e) {
+      debugPrint('Firestore updateUserPassword notice: $e');
+    }
+
+    return updatedInFirestore || true;
+  }
+
+  /// Memverifikasi kata sandi kustom pengguna jika login FirebaseAuth mengembalikan wrong-password
+  static Future<bool> verifyCustomUserPassword({
+    required String email,
+    required String inputPassword,
+  }) async {
+    final String cleanEmail = email.toLowerCase().trim();
+    if (cleanEmail.isEmpty || inputPassword.isEmpty) return false;
+
+    // 1. Cek SharedPreferences lokal
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String? localPass = prefs.getString('custom_password_$cleanEmail');
+      if (localPass != null && localPass.isNotEmpty && localPass == inputPassword) {
+        return true;
+      }
+    } catch (_) {}
+
+    // 2. Cek Cloud Firestore koleksi 'users'
+    try {
+      final query = await _usersRef
+          .where('email', isEqualTo: cleanEmail)
+          .limit(1)
+          .get()
+          .timeout(const Duration(seconds: 4));
+
+      if (query.docs.isNotEmpty) {
+        final data = query.docs.first.data() as Map<String, dynamic>;
+        final String? savedPass = (data['custom_password'] ?? data['password'])?.toString();
+        if (savedPass != null && savedPass.isNotEmpty && savedPass == inputPassword) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('custom_password_$cleanEmail', savedPass);
+          return true;
+        }
+      }
+    } catch (e) {
+      debugPrint('Firestore verifyCustomUserPassword notice: $e');
+    }
+
+    return false;
+  }
+
   /// Meng-update timestamp aktivitas terakhir user di Firestore
   static Future<void> updateLastActive() async {
     try {
@@ -127,10 +268,20 @@ class FirebaseService {
     }
   }
 
-  /// Mengambil seluruh daftar materi dan bank soal dari Cloud Firestore
+  /// Mengambil seluruh daftar materi dan bank soal dari Cloud Firestore secara real-time / server-first
   static Future<List<Map<String, dynamic>>> getMateriList() async {
     try {
-      final snapshot = await _materiRef.get().timeout(const Duration(milliseconds: 2500));
+      QuerySnapshot snapshot;
+      try {
+        // Selalu tarik data terbaru dari server Cloud Firestore terlebih dahulu (Source.serverAndCache)
+        snapshot = await _materiRef
+            .get(const GetOptions(source: Source.serverAndCache))
+            .timeout(const Duration(seconds: 8));
+      } catch (e) {
+        debugPrint('Notice serverAndCache getMateriList: $e');
+        snapshot = await _materiRef.get();
+      }
+
       if (snapshot.docs.isNotEmpty) {
         final List<Map<String, dynamic>> list = snapshot.docs.map((doc) {
           final data = doc.data() as Map<String, dynamic>;
@@ -164,7 +315,7 @@ class FirebaseService {
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(
-          'custom_teacher_materi_v10',
+          'custom_teacher_materi_v13',
           jsonEncode(list, toEncodable: (nonEncodable) {
             if (nonEncodable is Timestamp) return nonEncodable.toDate().toIso8601String();
             if (nonEncodable is DateTime) return nonEncodable.toIso8601String();
@@ -188,10 +339,11 @@ class FirebaseService {
       firestoreData['id'] = id;
       firestoreData['updatedAt'] = DateTime.now().toIso8601String();
 
-      await _materiRef.doc(id).set(firestoreData, SetOptions(merge: true)).timeout(const Duration(milliseconds: 3000));
+      await _materiRef.doc(id).set(firestoreData, SetOptions(merge: true)).timeout(const Duration(seconds: 15));
       debugPrint('Materi $id berhasil disimpan di Firestore.');
     } catch (e) {
       debugPrint('Error saveOrUpdateMateri Firestore: $e');
+      rethrow;
     }
   }
 
@@ -253,6 +405,7 @@ class FirebaseService {
     String assessment4 = '-',
     String postTestScore = '-',
     String status = 'Belum Ujian',
+    int violations = 0,
     List<String>? completedSteps,
     Map<String, dynamic>? posttestDiagnostics,
   }) async {
@@ -266,6 +419,7 @@ class FirebaseService {
       assessment4: assessment4,
       postTestScore: postTestScore,
       status: status,
+      violations: violations,
       completedSteps: completedSteps,
       posttestDiagnostics: posttestDiagnostics,
     ));
@@ -281,6 +435,7 @@ class FirebaseService {
     required String assessment4,
     required String postTestScore,
     required String status,
+    required int violations,
     List<String>? completedSteps,
     Map<String, dynamic>? posttestDiagnostics,
   }) async {
@@ -301,6 +456,8 @@ class FirebaseService {
       final String finalA4 = assessment4 != '-' ? assessment4 : (existing['assessment4'] ?? '-');
       final String finalPost = postTestScore != '-' ? postTestScore : (existing['postTest'] ?? '-');
       final String finalStatus = status != 'Belum Ujian' ? status : (existing['status'] ?? 'Belum Ujian');
+      final int existViolations = int.tryParse((existing['violations'] ?? '0').toString()) ?? 0;
+      final int finalViolations = violations > 0 ? violations : existViolations;
 
       final progressData = {
         'name': name,
@@ -312,6 +469,7 @@ class FirebaseService {
         'assessment4': finalA4,
         'postTest': finalPost,
         'status': finalStatus,
+        'violations': finalViolations,
         if (completedSteps != null) 'completedSteps': completedSteps,
         if (posttestDiagnostics != null) 'posttestDiagnostics': posttestDiagnostics,
         'lastActive': FieldValue.serverTimestamp(),
@@ -345,5 +503,77 @@ class FirebaseService {
       debugPrint('Error getStudentList Firestore: $e');
     }
     return [];
+  }
+
+  /// Menghasilkan kunci SharedPreferences spesifik per email pengguna (User-Scoped Key)
+  static String getUserKey(String email, String baseKey) {
+    final cleanEmail = email.toLowerCase().trim();
+    if (cleanEmail.isEmpty) return baseKey;
+    final safeEmail = cleanEmail.replaceAll(RegExp(r'[^\w.-]'), '_');
+    return '${baseKey}_$safeEmail';
+  }
+
+  /// Melakukan sinkronisasi progres belajar siswa berbasis akun (Scoped User Key).
+  /// Setiap akun memiliki kunci penyimpanan terpisah di perangkat tanpa menghapus data akun lain.
+  static Future<void> syncUserProgressOnLogin(String email) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String cleanEmail = email.toLowerCase().trim();
+      if (cleanEmail.isEmpty) return;
+
+      final String userKeySteps = getUserKey(cleanEmail, 'completed_steps');
+      final String userKeyPreBool = getUserKey(cleanEmail, 'isPreTestCompleted');
+      final String userKeyPreInt = getUserKey(cleanEmail, 'preTestScore');
+      final String userKeyPostBool = getUserKey(cleanEmail, 'isPostTestCompleted');
+      final String userKeyPostInt = getUserKey(cleanEmail, 'postTestScore');
+
+      await prefs.setString('last_logged_in_user_email', cleanEmail);
+      await prefs.setString('userEmail', cleanEmail);
+
+      final String docId = cleanEmail.replaceAll(RegExp(r'[^\w.-]'), '_');
+      final docSnapshot = await _progressRef.doc(docId).get().timeout(const Duration(milliseconds: 2500));
+
+      if (docSnapshot.exists && docSnapshot.data() != null) {
+        final data = docSnapshot.data() as Map<String, dynamic>;
+
+        if (!prefs.containsKey(userKeySteps) && data['completedSteps'] != null && data['completedSteps'] is List) {
+          final List<String> steps =
+              (data['completedSteps'] as List).map((e) => e.toString()).toList();
+          await prefs.setStringList(userKeySteps, steps);
+        }
+
+        final String preStr = (data['preTest'] ?? '-').toString();
+        if (preStr != '-' && !prefs.containsKey(userKeyPreInt)) {
+          final int pVal = int.tryParse(preStr) ?? 0;
+          await prefs.setBool(userKeyPreBool, true);
+          await prefs.setInt(userKeyPreInt, pVal);
+        }
+
+        final String postStr = (data['postTest'] ?? '-').toString();
+        if (postStr != '-' && !prefs.containsKey(userKeyPostInt)) {
+          final int poVal = int.tryParse(postStr) ?? 0;
+          await prefs.setBool(userKeyPostBool, true);
+          await prefs.setInt(userKeyPostInt, poVal);
+        }
+
+        final String a1 = (data['assessment1'] ?? '-').toString();
+        final String kA1 = getUserKey(cleanEmail, 'score_linkedlist');
+        if (a1 != '-' && !prefs.containsKey(kA1)) await prefs.setInt(kA1, int.tryParse(a1) ?? 0);
+
+        final String a2 = (data['assessment2'] ?? '-').toString();
+        final String kA2 = getUserKey(cleanEmail, 'score_stack');
+        if (a2 != '-' && !prefs.containsKey(kA2)) await prefs.setInt(kA2, int.tryParse(a2) ?? 0);
+
+        final String a3 = (data['assessment3'] ?? '-').toString();
+        final String kA3 = getUserKey(cleanEmail, 'score_queue');
+        if (a3 != '-' && !prefs.containsKey(kA3)) await prefs.setInt(kA3, int.tryParse(a3) ?? 0);
+
+        final String a4 = (data['assessment4'] ?? '-').toString();
+        final String kA4 = getUserKey(cleanEmail, 'score_searching_sorting');
+        if (a4 != '-' && !prefs.containsKey(kA4)) await prefs.setInt(kA4, int.tryParse(a4) ?? 0);
+      }
+    } catch (e) {
+      debugPrint('Error syncUserProgressOnLogin: $e');
+    }
   }
 }

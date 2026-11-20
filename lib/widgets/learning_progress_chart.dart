@@ -25,7 +25,7 @@ class LearningProgressChart extends StatelessWidget {
 
     const colorMateri = Color(0xFF00F0FF); // Cyan
     const colorVideo = Color(0xFFA855F7);  // Ungu
-    const colorKkmLine = Color(0xFFEF4444); // Garis KKM 80
+    const colorKkmLine = Color(0xFFEF4444); // Garis KKM 75
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -55,7 +55,7 @@ class LearningProgressChart extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  isEn ? 'Passing Standard: 80' : 'Batas KKM: 80',
+                  isEn ? 'Passing Standard: 75' : 'Batas KKM: 75',
                   style: const TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -83,7 +83,7 @@ class LearningProgressChart extends StatelessWidget {
                 textColor,
               ),
               _buildLegendItem(
-                isEn ? 'Quiz Passed (≥80)' : 'Kuis Lulus (≥80)',
+                isEn ? 'Quiz Passed (≥75)' : 'Kuis Lulus (≥75)',
                 const Color(0xFF10B981),
                 textColor,
               ),
@@ -181,7 +181,7 @@ class LearningProgressChart extends StatelessWidget {
                   drawVerticalLine: false,
                   horizontalInterval: 20,
                   getDrawingHorizontalLine: (value) {
-                    if (value == 80) {
+                    if (value == 75) {
                       return FlLine(
                         color: colorKkmLine.withValues(alpha: 0.7),
                         strokeWidth: 1.5,
@@ -206,7 +206,7 @@ class LearningProgressChart extends StatelessWidget {
                   final double videoVal = videoDone ? 100.0 : 0.0;
                   final double quizVal = quizScore.toDouble();
 
-                  final Color colorQuizBar = quizVal >= 80
+                  final Color colorQuizBar = quizVal >= 75
                       ? const Color(0xFF10B981)
                       : const Color(0xFFF59E0B);
 

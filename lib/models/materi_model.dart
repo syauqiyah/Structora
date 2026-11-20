@@ -8,6 +8,8 @@ class MateriModel {
   final String modulEn;
   final String videoUrl;
   final List<Map<String, dynamic>> questions;
+  final int? displayQuestionCount;
+  final int? durationMinutes;
   final String createdAt;
   final String updatedAt;
 
@@ -21,6 +23,8 @@ class MateriModel {
     this.modulEn = '',
     this.videoUrl = '',
     this.questions = const [],
+    this.displayQuestionCount,
+    this.durationMinutes,
     this.createdAt = '',
     this.updatedAt = '',
   });
@@ -48,6 +52,15 @@ class MateriModel {
           .toList();
     }
 
+    int? displayCount;
+    if (map['displayQuestionCount'] != null) {
+      displayCount = int.tryParse(map['displayQuestionCount'].toString());
+    }
+    int? durationMins;
+    if (map['durationMinutes'] != null) {
+      durationMins = int.tryParse(map['durationMinutes'].toString());
+    }
+
     final String createdStr = (map['createdAt'] ?? '').toString();
     final String updatedStr = (map['updatedAt'] ?? '').toString();
 
@@ -61,6 +74,8 @@ class MateriModel {
       modulEn: modulEnStr,
       videoUrl: videoUrlStr,
       questions: qList,
+      displayQuestionCount: displayCount,
+      durationMinutes: durationMins,
       createdAt: createdStr,
       updatedAt: updatedStr,
     );
@@ -68,7 +83,7 @@ class MateriModel {
 
   /// Converts this [MateriModel] instance into a Map for Database persistence.
   Map<String, dynamic> toMap() {
-    return {
+    final Map<String, dynamic> data = {
       'id': id,
       'judulId': judulId,
       'judulEn': judulEn,
@@ -88,6 +103,13 @@ class MateriModel {
       'createdAt': createdAt,
       'updatedAt': updatedAt,
     };
+    if (displayQuestionCount != null) {
+      data['displayQuestionCount'] = displayQuestionCount;
+    }
+    if (durationMinutes != null) {
+      data['durationMinutes'] = durationMinutes;
+    }
+    return data;
   }
 
   /// Convenience helper to retrieve localized Title

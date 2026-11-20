@@ -38,14 +38,14 @@ class AppText {
 
   static const Map<String, Map<String, String>> _localizedValues = {
     'id': {
-      // Navigasi & Header Siswa (Lama - Tidak Diubah)
-      'nav_home': 'Home',
+      // Navigasi & Header Siswa
+      'nav_home': 'Beranda',
       'nav_materi': 'Materi',
       'nav_lab': 'Simulasi Lab',
       'nav_eval': 'Evaluasi',
       'back_to_list': 'Kembali ke Daftar Materi',
 
-      // Tab Materi Siswa (Lama - Tidak Diubah)
+      // Tab Materi Siswa
       'tab_materi': 'Materi',
       'tab_video': 'Video',
       'tab_asesmen': 'Asesmen',
@@ -53,7 +53,7 @@ class AppText {
       'finish_watch': 'Selesai Nonton & Buka Asesmen',
       'video_unavailable': 'Video belum tersedia',
 
-      // Pengaturan Bahasa Siswa (Lama - Tidak Diubah)
+      // Pengaturan Bahasa Siswa
       'lang_setting': 'Bahasa',
       'indo': 'Bahasa Indonesia',
       'eng': 'English',
@@ -61,7 +61,7 @@ class AppText {
       // ==========================================
       // PENAMBAHAN: Modul Portal Guru & Dashboard
       // ==========================================
-      'teacher_portal': 'Structora Teacher Portal',
+      'teacher_portal': 'Portal Guru Structora',
       'teacher_nav_home': 'Beranda',
       'teacher_nav_progress': 'Progres Siswa',
       'teacher_nav_upload': 'Upload Materi',
@@ -484,6 +484,64 @@ class AppText {
     'Node kedua saja': 'The second node only',
     'Head dan NULL sekaligus': 'Both Head and NULL',
     'Kosong': 'Empty',
+
+    // Soal & Opsi Doubly Linked List (Riwayat Aktivitas)
+    'Sebuah aplikasi menggunakan Doubly Linked List untuk menyimpan riwayat aktivitas. Programmer menemukan bahwa pengguna dapat bergerak maju, tetapi gagal kembali ke aktivitas sebelumnya. Bagian yang perlu diperiksa adalah ....':
+    'An application uses a Doubly Linked List to store activity history. A programmer finds that users can move forward, but fail to navigate back to the previous activity. The component that needs inspection is ....',
+    'Sebuah aplikasi menggunakan Doubly Linked List untuk menyimpan riwayat aktivitas. Programmer menemukan bahwa pengguna dapat bergerak maju, tetapi gagal kembali ke aktivitas sebelumnya. Bagian yang perlu diperiksa adalah...':
+    'An application uses a Doubly Linked List to store activity history. A programmer finds that users can move forward, but fail to navigate back to the previous activity. The component that needs inspection is...',
+    'Pointer Prev': 'Prev Pointer',
+    'Head saja': 'Head only',
+    'Pointer Next saja': 'Next Pointer only',
+    'Data Value': 'Data Value',
+    'Pointer Prev saja': 'Prev Pointer only',
+    'Pointer Tail saja': 'Tail Pointer only',
+    'Node Head': 'Head Node',
+    'Node Tail': 'Tail Node',
+
+    // Soal & Opsi Tambahan (Pre-Test, Asesmen & Sistem)
+    'Dalam sebuah program, terdapat tiga node yang saling terhubung. The first node menyimpan angka 15, node kedua menyimpan angka 25, dan node ketiga menyimpan angka 35. Komponen yang digunakan untuk menunjukkan node pertama adalah ....':
+    'In a program, three nodes are interconnected. The first node stores the number 15, the second node stores 25, and the third node stores 35. The component used to designate the first node is ....',
+    'Dalam sebuah program, terdapat tiga node yang saling terhubung. Node pertama menyimpan angka 15, node kedua menyimpan angka 25, dan node ketiga menyimpan angka 35. Komponen yang digunakan untuk menunjukkan node pertama adalah ....':
+    'In a program, three nodes are interconnected. The first node stores the number 15, the second node stores 25, and the third node stores 35. The component used to designate the first node is ....',
+    'Dalam sebuah Stack, program menjalankan operasi Pop ketika tidak terdapat satu pun elemen di dalamnya. Kondisi kesalahan yang terjadi adalah ....':
+    'In a Stack, a program executes a Pop operation when there are no elements inside it. The error condition that occurs is ....',
+    'Dalam sebuah Stack, program menjalankan operasi Pop ketika tidak terdapat satu pun elemen di dalamnya. Kondisi kesalahan yang terjadi is ....':
+    'In a Stack, a program executes a Pop operation when there are no elements inside it. The error condition that occurs is ....',
+    'Sebuah perusahaan ingin mengembangkan aplikasi pengelolaan daftar pekerjaan. Data sering ditambahkan dan dihapus, serta pengguna dapat berpindah dari pekerjaan sebelumnya ke pekerjaan berikutnya maupun sebaliknya. Setelah mempertimbangkan kebutuhan tersebut, programmer memilih Doubly Linked List. Alasan paling tepat adalah ....':
+    'A company wants to develop a task list management application. Data is frequently added and deleted, and users can navigate between previous and next tasks bidirectionally. After evaluating these requirements, the programmer selects a Doubly Linked List. The most appropriate reason is ....',
+    'Sebuah perusahaan ingin mengembangkan aplikasi pengelolaan daftar pekerjaan. Data sering ditambahkan dan dihapus, serta pengguna dapat berpindah dari pekerjaan sebelumnya ke pekerjaan berikutnya maupun sebaliknya. Setelah mempertimbangkan kebutuhan tersebut, programmer memilih Doubly Linked List. Alasan paling tepat is ....':
+    'A company wants to develop a task list management application. Data is frequently added and deleted, and users can navigate between previous and next tasks bidirectionally. After evaluating these requirements, the programmer selects a Doubly Linked List. The most appropriate reason is ....',
+    'Seorang pengembang sedang membuat aplikasi pengelolaan data anggota organisasi. Jumlah anggota dapat bertambah dan berkurang setiap saat. Pengembang ingin menambahkan anggota baru tanpa harus memindahkan seluruh data yang sudah tersimpan. Struktur data yang paling sesuai adalah ....':
+    'A developer is building an organization member data management application. The number of members can dynamically expand and shrink at any time. The developer wants to insert new members without shifting all existing stored data. The most suitable data structure is ....',
+    'Seorang pengembang sedang membuat aplikasi pengelolaan data anggota organisasi. Jumlah anggota dapat bertambah dan berkurang setiap saat. Pengembang ingin menambahkan anggota baru tanpa harus memindahkan seluruh data yang sudah tersimpan. Struktur data yang paling sesuai is ....':
+    'A developer is building an organization member data management application. The number of members can dynamically expand and shrink at any time. The developer wants to insert new members without shifting all existing stored data. The most suitable data structure is ....',
+    'Node memiliki pointer ke elemen sebelumnya dan berikutnya':
+    'Nodes contain pointers to both previous and next elements',
+    'Data hanya dapat diproses dari belakang': 'Data can only be processed from the rear',
+    'Semua data disimpan dalam satu posisi': 'All data is stored in a single position',
+    'Setiap penambahan data harus menghapus data lama': 'Every data addition requires deleting old data',
+    'Array dengan kapasitas tetap': 'Fixed-capacity Array',
+    'Sebuah Linked List memiliki node terakhir yang tidak lagi menunjuk ke node lain. Nilai pointer pada node terakhir tersebut adalah NULL. Fungsi NULL dalam kondisi tersebut adalah ....':
+    'A Linked List has a terminal node that no longer points to another node. The pointer value at this terminal node is NULL. The purpose of NULL in this condition is to ....',
+    'Sebuah Linked List memiliki node terakhir yang tidak lagi menunjuk ke node lain. Nilai pointer pada node terakhir tersebut adalah NULL. Fungsi NULL dalam kondisi tersebut is ....':
+    'A Linked List has a terminal node that no longer points to another node. The pointer value at this terminal node is NULL. The purpose of NULL in this condition is to ....',
+    'Menghubungkan dua node sekaligus': 'Connect two nodes simultaneously',
+    'Menyimpan data tambahan': 'Store additional data',
+    'Menunjukkan node pertama': 'Indicate the first node',
+    'Menandai akhir rantai node': 'Mark the end of the node chain',
+    'Sebuah sistem menerima data A, B, C, dan D melalui operasi Enqueue secara berurutan. Setelah itu, sistem menjalankan dua kali Dequeue. Data yang masih berada dalam antrean adalah ....':
+    'A system receives data A, B, C, and D through Enqueue operations sequentially. Afterward, the system executes Dequeue twice. The data remaining in the queue is ....',
+    'Sebuah sistem menerima data A, B, C, dan D melalui operasi Enqueue secara berurutan. Setelah itu, sistem menjalankan dua kali Dequeue. Data yang masih berada dalam antrean is ....':
+    'A system receives data A, B, C, and D through Enqueue operations sequentially. Afterward, the system executes Dequeue twice. The data remaining in the queue is ....',
+    'Sebuah sistem mencetak dokumen berdasarkan urutan dokumen yang dikirim oleh pengguna. Dokumen pertama yang dikirim harus dicetak sebelum dokumen berikutnya. Struktur data yang paling tepat adalah ....':
+    'A system prints documents based on the sequence in which users submit them. The first document sent must be printed before subsequent documents. The most suitable data structure is ....',
+    'Sebuah sistem mencetak dokumen berdasarkan urutan dokumen yang dikirim oleh pengguna. Dokumen pertama yang dikirim harus dicetak sebelum dokumen berikutnya. Struktur data yang paling tepat is ....':
+    'A system prints documents based on the sequence in which users submit them. The first document sent must be printed before subsequent documents. The most suitable data structure is ....',
+    'Sebuah program memiliki Stack dengan kapasitas maksimal lima elemen. Saat ini seluruh':
+    'A program features a Stack with a maximum capacity of five elements. Currently all',
+    'Sebuah program memiliki Stack dengan kapasitas maksimal lima elemen.':
+    'A program features a Stack with a maximum capacity of five elements.',
   };
 
   static String tr(String key) {
@@ -500,10 +558,13 @@ class AppText {
   static String translateDirect(String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return text;
+
+    // 1. Direct Exact Dictionary Match
     if (_contentDictionary.containsKey(trimmed)) {
       return _contentDictionary[trimmed]!;
     }
 
+    // 2. Normalized Dictionary Match (Ignoring casing and special characters)
     final normInput = trimmed.toLowerCase().replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
     if (normInput.isNotEmpty) {
       for (final entry in _contentDictionary.entries) {
@@ -515,11 +576,201 @@ class AppText {
     }
 
     String result = text;
+
+    // 3. Sentence Pattern Translators (Structured Template Translation for Exam Questions)
+    final List<MapEntry<RegExp, String Function(Match)>> patternTranslators = [
+      // Pattern: "Sebuah/Suatu [Structure] memiliki/menggunakan/tersusun..."
+      MapEntry(
+        RegExp(r'^(Sebuah|Suatu)\s+(queue|stack|linked list|array|tree|graph)\s+(memiliki|menggunakan|tersusun)\s+(.*)', caseSensitive: false),
+        (m) {
+          final struct = m.group(2)!;
+          final rest = m.group(4)!;
+          return 'A ${struct.toLowerCase()} contains $rest';
+        },
+      ),
+      // Pattern: "Manakah [pernyataan/opsi] [berikut] yang [benar/tepat]..."
+      MapEntry(
+        RegExp(r'^Manakah\s+.*?(pernyataan|opsi|pilihan).*?(benar|tepat|sesuai)\s*(.*)', caseSensitive: false),
+        (m) {
+          final rest = m.group(3)!;
+          final cleanRest = rest.startsWith('mengenai') || rest.startsWith('tentang')
+              ? 'regarding ${rest.replaceFirst(RegExp(r'^(mengenai|tentang)\s*', caseSensitive: false), '')}'
+              : rest;
+          return 'Which of the following statements is correct $cleanRest'.trim();
+        },
+      ),
+      // Pattern: "Apa [hasil|keluaran|fungsi|kegunaan] dari..."
+      MapEntry(
+        RegExp(r'^Apa\s+(hasil|keluaran|output|fungsi|kegunaan|tujuan)\s+dari\s+(.*)', caseSensitive: false),
+        (m) {
+          final noun = m.group(1)!.toLowerCase();
+          final rest = m.group(2)!;
+          String target = 'result';
+          if (noun == 'fungsi' || noun == 'kegunaan') target = 'purpose';
+          if (noun == 'tujuan') target = 'goal';
+          return 'What is the $target of $rest';
+        },
+      ),
+      // Pattern: "Urutan [langkah|proses|elemen] yang [benar|tepat]..."
+      MapEntry(
+        RegExp(r'^Urutan\s+(langkah|proses|elemen)\s+yang\s+(benar|tepat|sesuai)\s*(.*)', caseSensitive: false),
+        (m) {
+          final item = m.group(1)!.toLowerCase();
+          final rest = m.group(3)!;
+          String noun = 'sequence of steps';
+          if (item == 'proses') noun = 'order of processing';
+          if (item == 'elemen') noun = 'sequence of elements';
+          return 'The correct $noun $rest'.trim();
+        },
+      ),
+      // Pattern: "Keuntungan/Kelebihan/Kelemahan/Kekurangan utama [dari|menggunakan]..."
+      MapEntry(
+        RegExp(r'^(Keuntungan|Kelebihan|Kelemahan|Kekurangan)\s+utama\s+(?:dari|menggunakan)?\s*(.*)', caseSensitive: false),
+        (m) {
+          final type = m.group(1)!.toLowerCase();
+          final rest = m.group(2)!;
+          final isAdv = type == 'keuntungan' || type == 'kelebihan';
+          final label = isAdv ? 'primary advantage' : 'main drawback';
+          return 'The $label of $rest'.trim();
+        },
+      ),
+      // Pattern: "Kondisi [saat|di mana|ketika]..."
+      MapEntry(
+        RegExp(r'^Kondisi\s+(?:saat|di mana|ketika)\s+(.*)', caseSensitive: false),
+        (m) => 'The condition when ${m.group(1)}',
+      ),
+      // Pattern: "Operasi [untuk] [menambahkan|menghapus|mengambil|melihat|menelusuri]..."
+      MapEntry(
+        RegExp(r'^Operasi\s+(?:untuk\s+)?(menambahkan|menghapus|mengambil|melihat|menelusuri)\s+(.*)', caseSensitive: false),
+        (m) {
+          final action = m.group(1)!.toLowerCase();
+          final rest = m.group(2)!;
+          String verb = 'manipulate';
+          if (action == 'menambahkan') verb = 'add an element to';
+          if (action == 'menghapus') verb = 'delete an element from';
+          if (action == 'mengambil') verb = 'retrieve an element from';
+          if (action == 'melihat') verb = 'view the element in';
+          if (action == 'menelusuri') verb = 'traverse';
+          return 'The operation to $verb $rest';
+        },
+      ),
+      // Pattern: "Kompleksitas waktu [terbaik|rata-rata|terburuk]..."
+      MapEntry(
+        RegExp(r'^Kompleksitas\s+waktu\s*(terbaik|rata-rata|terburuk)?\s*(?:dari|pada)?\s*(.*)', caseSensitive: false),
+        (m) {
+          final type = (m.group(1) ?? '').toLowerCase();
+          final rest = m.group(2)!;
+          String tag = 'time complexity';
+          if (type.contains('terbaik')) tag = 'best-case time complexity';
+          if (type.contains('rata')) tag = 'average-case time complexity';
+          if (type.contains('terburuk')) tag = 'worst-case time complexity';
+          return 'The $tag of $rest'.trim();
+        },
+      ),
+    ];
+
+    for (final pattern in patternTranslators) {
+      final match = pattern.key.firstMatch(result);
+      if (match != null) {
+        result = pattern.value(match);
+        break;
+      }
+    }
+
+    // 4. Multi-Word Phrase Replacements (Longest phrases substituted first)
+    final Map<String, String> phraseMap = {
+      'Dalam sebuah program, terdapat tiga node yang saling terhubung':
+          'In a program, three nodes are interconnected',
+      'The first node menyimpan angka 15, node kedua menyimpan angka 25, dan node ketiga menyimpan angka 35':
+          'The first node stores the number 15, the second node stores 25, and the third node stores 35',
+      'Node pertama menyimpan angka 15, node kedua menyimpan angka 25, dan node ketiga menyimpan angka 35':
+          'The first node stores the number 15, the second node stores 25, and the third node stores 35',
+      'Komponen yang digunakan untuk menunjukkan node pertama':
+          'The component used to designate the first node',
+      'Dalam sebuah Stack, program menjalankan operasi Pop ketika tidak terdapat satu pun elemen di dalamnya':
+          'In a Stack, a program executes a Pop operation when there are no elements inside it',
+      'Sebuah perusahaan ingin mengembangkan aplikasi pengelolaan daftar pekerjaan':
+          'A company wants to develop a task list management application',
+      'Data sering ditambahkan dan dihapus, serta pengguna dapat berpindah dari pekerjaan sebelumnya ke pekerjaan berikutnya maupun sebaliknya':
+          'Data is frequently added and deleted, and users can navigate between previous and next tasks bidirectionally',
+      'Setelah mempertimbangkan kebutuhan tersebut, programmer memilih Doubly Linked List':
+          'After evaluating these requirements, the programmer selects a Doubly Linked List',
+      'Node memiliki pointer ke elemen sebelumnya dan berikutnya':
+          'Nodes contain pointers to both previous and next elements',
+      'Data hanya dapat diproses dari belakang': 'Data can only be processed from the rear',
+      'Semua data disimpan dalam satu posisi': 'All data is stored in a single position',
+      'Setiap penambahan data harus menghapus data lama': 'Every data addition requires deleting old data',
+      'Seorang pengembang sedang membuat aplikasi pengelolaan data anggota organisasi':
+          'A developer is building an organization member data management application',
+      'Jumlah anggota dapat bertambah dan berkurang setiap saat':
+          'The number of members can dynamically expand and shrink at any time',
+      'Pengembang ingin menambahkan anggota baru tanpa harus memindahkan seluruh data yang sudah tersimpan':
+          'The developer wants to insert new members without shifting all existing stored data',
+      'Struktur data yang paling sesuai': 'The most suitable data structure',
+      'Array dengan kapasitas tetap': 'Fixed-capacity Array',
+      'Sebuah Linked List memiliki node terakhir yang tidak lagi menunjuk ke node lain':
+          'A Linked List has a terminal node that no longer points to another node',
+      'Nilai pointer pada node terakhir tersebut adalah NULL':
+          'The pointer value at this terminal node is NULL',
+      'Fungsi NULL dalam kondisi tersebut':
+          'The purpose of NULL in this condition',
+      'Menghubungkan dua node sekaligus': 'Connect two nodes simultaneously',
+      'Menyimpan data tambahan': 'Store additional data',
+      'Menunjukkan node pertama': 'Indicate the first node',
+      'Menandai akhir rantai node': 'Mark the end of the node chain',
+      'Setelah itu, sistem menjalankan dua kali Dequeue':
+          'Afterward, the system executes Dequeue twice',
+      'Data yang masih berada dalam antrean': 'The data remaining in the queue',
+      'Sebuah sistem mencetak dokumen berdasarkan urutan dokumen yang dikirim oleh pengguna':
+          'A system prints documents based on the sequence submitted by users',
+      'Dokumen pertama yang dikirim harus dicetak sebelum dokumen berikutnya':
+          'The first document sent must be printed before subsequent documents',
+      'Sebuah program memiliki Stack dengan kapasitas maksimal lima elemen':
+          'A program features a Stack with a maximum capacity of five elements',
+      'Programmer menemukan bahwa pengguna dapat bergerak maju, tetapi gagal kembali ke aktivitas sebelumnya':
+          'A programmer finds that users can move forward, but fail to navigate back to the previous activity',
+      'Bagian yang perlu diperiksa adalah': 'The component that needs inspection is',
+      'Kunci jawaban yang benar adalah opsi': 'Correct answer is option',
+      'Kunci jawaban yang benar adalah': 'The correct answer is',
+      'Jawaban benar berdasarkan naskah materi yang disusun oleh guru.':
+          'Correct answer according to module material script.',
+      'Jawaban benar berdasarkan naskah materi.':
+          'Correct answer according to module material script.',
+      'Jawaban benar berdasarkan': 'Correct answer according to',
+      'Pembahasan:': 'Explanation:',
+      'Penjelasan:': 'Explanation:',
+      'Kunci Jawaban:': 'Correct Key:',
+      'Jawaban Kamu:': 'Your Answer:',
+      'Jawaban Kamu - Benar': 'Your Answer - Correct',
+      'Pointer Prev saja': 'Prev Pointer only',
+      'Pointer Next saja': 'Next Pointer only',
+      'Pointer Prev': 'Prev Pointer',
+      'Pointer Next': 'Next Pointer',
+      'Head saja': 'Head only',
+      'Tail saja': 'Tail only',
+      'Data Value': 'Data Value',
+      'adalah ....': 'is ....',
+      'adalah...': 'is...',
+    };
+
+    phraseMap.forEach((idPhrase, enPhrase) {
+      if (result.contains(idPhrase)) {
+        result = result.replaceAll(idPhrase, enPhrase);
+      }
+    });
+
     _contentDictionary.forEach((idKey, enVal) {
       if (result.contains(idKey)) {
         result = result.replaceAll(idKey, enVal);
       }
     });
+
+    // 5. Clean option suffix formatting (e.g. "... saja" -> "... only")
+    if (result.trim().endsWith(' saja')) {
+      final base = result.trim().substring(0, result.trim().length - 5).trim();
+      result = '$base only';
+    }
+
     return result;
   }
 }

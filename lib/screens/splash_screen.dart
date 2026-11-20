@@ -7,7 +7,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'auth_screen.dart';
 import 'main_screen.dart';
 import '../teacher_mode/teacher_dashboard_screen.dart';
-import '../services/firebase_service.dart';
 
 class SplashScreen extends StatefulWidget {
   final bool isDarkMode;
@@ -411,71 +410,81 @@ class _RootGateState extends State<RootGate> {
   }
 
   Future<void> _checkLoginStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-    bool isTeacherRole = prefs.getBool('isTeacher') ?? false;
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
 
-    if (prefs.getBool('isLoggedIn') == true) {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        final firestoreRole = await FirebaseService.getUserRole(user.uid);
-        if (firestoreRole != null) {
-          isTeacherRole = firestoreRole == 'teacher';
-        }
+    // 1. Cek Pertama Kali Instalasi / First Launch: Bersihkan Sesi Residu Lama
+    final bool hasRunBefore = prefs.getBool('app_has_run_before') ?? false;
+    if (!hasRunBefore) {
+      await prefs.setBool('app_has_run_before', true);
+      await prefs.setBool('isLoggedIn', false);
+      await prefs.setBool('isTeacher', false);
+      await prefs.remove('userRole');
+      await prefs.remove('userName');
+      await prefs.remove('userEmail');
+    }
+
+    // 2. Pada Perangkat Native (Android/iOS), Wajib Cek Keberadaan User Aktif di FirebaseAuth
+    if (!kIsWeb && FirebaseAuth.instance.currentUser == null) {
+      await prefs.setBool('isLoggedIn', false);
+      if (mounted) {
+        setState(() {
+          _isLoggedIn = false;
+          _isTeacher = false;
+          _userName = '';
+          _userEmail = '';
+          _isLoading = false;
+        });
       }
+      return;
+    }
 
+    final bool isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+    final String userRole =
+        (prefs.getString('userRole') ?? '').trim().toLowerCase();
+    final String userEmail = (prefs.getString('userEmail') ?? '').trim();
+    final String userName = (prefs.getString('userName') ?? '').trim();
+
+    if (isLoggedIn &&
+        userEmail.isNotEmpty &&
+        (userRole == 'teacher' || userRole == 'guru')) {
+      final String finalName = userName.isNotEmpty ? userName : 'Guru';
+      if (mounted) {
+        setState(() {
+          _isLoggedIn = true;
+          _isTeacher = true;
+          _userName = finalName;
+          _userEmail = userEmail;
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
+    if (isLoggedIn &&
+        userEmail.isNotEmpty &&
+        (userRole == 'student' || userRole == 'siswa')) {
+      final String finalName = userName.isNotEmpty ? userName : 'Siswa';
+      if (mounted) {
+        setState(() {
+          _isLoggedIn = true;
+          _isTeacher = false;
+          _userName = finalName;
+          _userEmail = userEmail;
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
+    if (mounted) {
       setState(() {
-        _isLoggedIn = true;
-        _isTeacher = isTeacherRole;
-        _userName = prefs.getString('userName') ?? 'Pengguna';
-        _userEmail = prefs.getString('userEmail') ?? '';
+        _isLoggedIn = false;
+        _isTeacher = false;
+        _userName = '';
+        _userEmail = '';
         _isLoading = false;
       });
-      return;
     }
-
-    if (kIsWeb) {
-      setState(() => _isLoading = false);
-      return;
-    }
-
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        try {
-          await user.reload();
-        } catch (_) {}
-        if (user.emailVerified) {
-          final firestoreRole = await FirebaseService.getUserRole(user.uid);
-          if (firestoreRole != null) {
-            isTeacherRole = firestoreRole == 'teacher';
-          }
-
-          final emailClean = user.email?.toLowerCase().trim() ?? '';
-          final savedName = prefs.getString('saved_name_$emailClean');
-
-          String finalName = user.displayName ?? savedName ?? prefs.getString('userName') ?? '';
-          if (finalName.isEmpty) {
-            String fallbackName = user.email?.split('@').first ?? 'Pengguna';
-            if (fallbackName.isNotEmpty) {
-              fallbackName = fallbackName[0].toUpperCase() + fallbackName.substring(1);
-            }
-            finalName = fallbackName;
-          }
-
-          setState(() {
-            _isLoggedIn = true;
-            _isTeacher = isTeacherRole;
-            _userName = finalName;
-            _userEmail = user.email ?? '';
-            _isLoading = false;
-          });
-          return;
-        }
-      }
-    } catch (e) {
-      debugPrint('Error auth check: $e');
-    }
-    setState(() => _isLoading = false);
   }
 
   void _onLoginSuccess(String name, String email, bool isTeacher) async {

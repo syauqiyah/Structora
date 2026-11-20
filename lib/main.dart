@@ -4,7 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import 'screens/splash_screen.dart';
+import 'teacher_mode/teacher_content_helper.dart';
 import 'utils/app_translations.dart';
+import 'ar_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +22,8 @@ void main() async {
     } else {
       // Di Android/iOS akan membaca konfigurasi native (google-services.json) secara otomatis
       await Firebase.initializeApp();
+      // Sinkronisasi satu kali seluruh 6 dokumen _defaultMateriList dwibahasa ke Firestore koleksi 'materi' via WriteBatch
+      await TeacherContentHelper.syncDefaultMateriToFirestore();
     }
   } catch (e) {
     debugPrint('Error init Firebase: $e');
@@ -112,6 +116,9 @@ class _StructuraAppState extends State<StructuraApp> {
             ),
             cardColor: Colors.white,
           ),
+          routes: {
+            '/ar-simulation': (context) => const ArSimulationScreen(),
+          },
           home: SplashScreen(
             isDarkMode: _isDarkMode,
             fontScale: _fontScale,

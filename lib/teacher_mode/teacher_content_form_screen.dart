@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/materi_model.dart';
+import '../services/auto_translate_service.dart';
 import '../utils/app_translations.dart';
 import 'teacher_content_helper.dart';
 
@@ -30,6 +33,8 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
   late TextEditingController _titleCtrl;
   late TextEditingController _descCtrl;
   late TextEditingController _videoCtrl;
+  late TextEditingController _displayQuestionCountCtrl;
+  late TextEditingController _durationMinutesCtrl;
 
   List _questionsList = [];
   String _currentLanguage = 'id';
@@ -148,6 +153,31 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
     'Tidak perlu ubah pointer': 'No pointer change needed',
   };
 
+  bool _bgTranslating = false;
+
+  /// Background-translates every question that has no complete English version
+  /// (batches of 5) so the preview list & detail dialog are 100% English.
+  void _ensureQuestionsTranslated() {
+    if (_bgTranslating || _questionsList.isEmpty) return;
+    final bool en =
+        _currentLanguage == 'en' || LanguageController.instance.isEnglish;
+    if (!en) return;
+    final svc = AutoTranslateService.instance;
+    final bool pending = _questionsList
+        .whereType<Map>()
+        .any((q) => !svc.isQuestionTranslated(Map<String, dynamic>.from(q)));
+    if (!pending) return;
+    _bgTranslating = true;
+    svc.translatePending(_questionsList, onBatch: (updates) {
+      if (!mounted) return;
+      setState(() {
+        updates.forEach((i, v) {
+          if (i < _questionsList.length) _questionsList[i] = v;
+        });
+      });
+    }).whenComplete(() => _bgTranslating = false);
+  }
+
   String _translateIfEn(String text) {
     final bool isEn =
         _currentLanguage == 'en' || LanguageController.instance.isEnglish;
@@ -200,6 +230,21 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
     if (rawQ != null && rawQ is List && rawQ.isNotEmpty) {
       _questionsList = List.from(rawQ);
     }
+
+    final int? initDisplayCount = widget.existingMateri?['displayQuestionCount'] != null
+        ? int.tryParse(widget.existingMateri!['displayQuestionCount'].toString())
+        : null;
+    final int? initDuration = widget.existingMateri?['durationMinutes'] != null
+        ? int.tryParse(widget.existingMateri!['durationMinutes'].toString())
+        : null;
+
+    final String initialDisplayStr = initDisplayCount != null
+        ? '$initDisplayCount'
+        : (_questionsList.isNotEmpty ? '${_questionsList.length}' : '30');
+    final String initialDurationStr = initDuration != null ? '$initDuration' : '30';
+
+    _displayQuestionCountCtrl = TextEditingController(text: initialDisplayStr);
+    _durationMinutesCtrl = TextEditingController(text: initialDurationStr);
 
     _loadLanguagePreference();
   }
@@ -260,91 +305,208 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
     _titleCtrl.dispose();
     _descCtrl.dispose();
     _videoCtrl.dispose();
+    _displayQuestionCountCtrl.dispose();
+    _durationMinutesCtrl.dispose();
     super.dispose();
   }
 
-  void _parseAndImportQuestions(String rawText) {
+  void _parseAndImportQuestions(String rawText, [int? customDisplayCount, int? customDurationMinutes]) {
     final bool isEn =
         _currentLanguage == 'en' || LanguageController.instance.isEnglish;
     if (rawText.trim().isEmpty) return;
 
-    final String cleanText = rawText.replaceAll('\r', '');
-    final List lines = cleanText.split('\n');
-    final List parsedSlots = [];
+    try {
+      final String cleanText = rawText.replaceAll('\r', '');
+      final List lines = cleanText.split('\n');
+      final List parsedSlots = [];
 
-    String currentQ = '';
-    final List currentOpts = [];
-    int currentAns = 0;
+      int? headerDisplayCount;
+      int? headerDurationMinutes;
 
-    void pushCurrentQuestion() {
-      if (currentQ.trim().isNotEmpty) {
-        while (currentOpts.length < 4) {
-          currentOpts.add('-');
-        }
-        parsedSlots.add({
-          'q': currentQ.trim(),
-          'options': List.from(currentOpts),
-          'answerIndex': currentAns,
-        });
-        currentQ = '';
-        currentOpts.clear();
-        currentAns = 0;
-      }
-    }
-
-    for (var rawLine in lines) {
-      final String line = rawLine.toString().trim();
-      if (line.isEmpty) continue;
-
-      final ansMatch = RegExp(
-        r'^(?:Kunci|Jawaban|Ans|Key)\s*[:=]\s*([A-Da-d])',
+      final displayHeaderRegExp = RegExp(
+        r'^(?:Jumlah\s*Soal\s*Ditampilkan|Jumlah\s*Soal|Soal\s*Ditampilkan|Tampil\s*Soal|Jumlah|Display\s*Questions|Questions\s*Displayed|Question\s*Count|Display)\s*[:=]\s*(\d+)',
         caseSensitive: false,
-      ).firstMatch(line);
+      );
 
-      final optMatch = RegExp(r'^([A-Da-d])[.)]\s*(.*)$').firstMatch(line);
-      final qMatch = RegExp(r'^\d+[.)]\s*(.*)$').firstMatch(line);
+      final durationHeaderRegExp = RegExp(
+        r'^(?:Durasi\s*Pengerjaan|Durasi|Waktu\s*Pengerjaan|Waktu|Duration|Time)\s*[:=]\s*(\d+)',
+        caseSensitive: false,
+      );
 
-      if (ansMatch != null) {
-        final char = ansMatch.group(1)!.toUpperCase();
-        currentAns = char.codeUnitAt(0) - 65;
-      } else if (optMatch != null) {
-        currentOpts.add(optMatch.group(2)!.trim());
-      } else if (qMatch != null) {
-        pushCurrentQuestion();
-        currentQ = qMatch.group(1)!.trim();
-      } else {
-        if (currentOpts.isEmpty) {
-          currentQ = currentQ.isEmpty ? line : '$currentQ $line';
-        } else if (currentOpts.isNotEmpty) {
-          final lastIdx = currentOpts.length - 1;
-          currentOpts[lastIdx] = '${currentOpts[lastIdx]} $line';
+      final List<String> questionLines = [];
+
+      for (var rawLine in lines) {
+        final String line = rawLine.toString().trim();
+        if (line.isEmpty) continue;
+
+        final displayMatch = displayHeaderRegExp.firstMatch(line);
+        final durationMatch = durationHeaderRegExp.firstMatch(line);
+
+        if (displayMatch != null && questionLines.isEmpty) {
+          headerDisplayCount = int.tryParse(displayMatch.group(1)!);
+          continue;
+        }
+
+        if (durationMatch != null && questionLines.isEmpty) {
+          headerDurationMinutes = int.tryParse(durationMatch.group(1)!);
+          continue;
+        }
+
+        questionLines.add(line);
+      }
+
+      String currentQ = '';
+      final List<String> currentOpts = [];
+      int? currentAns;
+      String currentExp = '';
+      bool isParsingExp = false;
+
+      const letters = ['A', 'B', 'C', 'D', 'E'];
+
+      void pushCurrentQuestion() {
+        if (currentQ.trim().isNotEmpty) {
+          while (currentOpts.length < 4) {
+            currentOpts.add('-');
+          }
+          final String qIndo = currentQ.trim();
+          final List<String> optsIndo = List<String>.from(currentOpts);
+          final int finalAnsIdx = (currentAns != null && currentAns! >= 0 && currentAns! < optsIndo.length)
+              ? currentAns!
+              : 0;
+
+          final String ansLetter = finalAnsIdx < letters.length ? letters[finalAnsIdx] : 'A';
+
+          String expIndo = currentExp.trim();
+          if (expIndo.isEmpty) {
+            expIndo = 'Jawaban yang benar adalah opsi $ansLetter.';
+          }
+
+          parsedSlots.add({
+            'q': qIndo,
+            'question': qIndo,
+            'q_en': '',
+            'question_en': '',
+            'options': optsIndo,
+            'options_en': const <String>[],
+            'answerIndex': finalAnsIdx,
+            'answer': finalAnsIdx,
+            'explanation': expIndo,
+            'explanation_en': '',
+          });
+
+          currentQ = '';
+          currentOpts.clear();
+          currentAns = null;
+          currentExp = '';
+          isParsingExp = false;
         }
       }
-    }
 
-    pushCurrentQuestion();
+      final qRegExp = RegExp(r'^(?:Soal\s*)?\d+[.)]\s*(.*)$', caseSensitive: false);
+      final optRegExp = RegExp(r'^\*?\s*([A-Ea-e])[.)]\s*\*?\s*(.*)$');
+      final ansRegExp = RegExp(
+        r'^(?:Kunci\s*Jawaban|Kunci|Jawaban\s*Benar|Jawaban|Correct\s*Answer|Key\s*Answer|Ans|Key)\s*[:=]?\s*\*?([A-Ea-e])\*?',
+        caseSensitive: false,
+      );
+      final expRegExp = RegExp(
+        r'^(?:Pembahasan|Penjelasan|Explanation|Expl|Reason|Alasan)\s*[:=]\s*(.*)$',
+        caseSensitive: false,
+      );
 
-    if (parsedSlots.isNotEmpty) {
-      setState(() {
-        _questionsList = parsedSlots;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(isEn
-              ? 'Successfully imported ${parsedSlots.length} questions automatically!'
-              : 'Berhasil mengimpor ${parsedSlots.length} butir soal secara otomatis!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(isEn
-              ? 'Script format not recognized. Ensure numbering and options A-D exist.'
-              : 'Format naskah tidak dikenali. Pastikan ada penomoran dan pilihan A-D.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      for (var line in questionLines) {
+        final qMatch = qRegExp.firstMatch(line);
+        final ansMatch = ansRegExp.firstMatch(line);
+        final expMatch = expRegExp.firstMatch(line);
+        final optMatch = optRegExp.firstMatch(line);
+
+        if (qMatch != null) {
+          pushCurrentQuestion();
+          currentQ = qMatch.group(1)!.trim();
+          isParsingExp = false;
+        } else if (expMatch != null) {
+          isParsingExp = true;
+          currentExp = expMatch.group(1)!.trim();
+        } else if (ansMatch != null) {
+          final char = ansMatch.group(1)!.toUpperCase();
+          currentAns = char.codeUnitAt(0) - 65;
+
+          final inlineExpMatch = expRegExp.firstMatch(line);
+          if (inlineExpMatch != null) {
+            isParsingExp = true;
+            currentExp = inlineExpMatch.group(1)!.trim();
+          }
+        } else if (optMatch != null && !isParsingExp) {
+          final char = optMatch.group(1)!.toUpperCase();
+          final int optIdx = char.codeUnitAt(0) - 65;
+          String optText = optMatch.group(2)!.trim();
+
+          if (line.contains('*')) {
+            currentAns = optIdx;
+            optText = optText.replaceAll('*', '').trim();
+          }
+
+          currentOpts.add(optText);
+          isParsingExp = false;
+        } else {
+          if (isParsingExp) {
+            currentExp = currentExp.isEmpty ? line : '$currentExp\n$line';
+          } else if (currentOpts.isNotEmpty) {
+            final lastIdx = currentOpts.length - 1;
+            currentOpts[lastIdx] = '${currentOpts[lastIdx]} $line';
+          } else if (currentQ.isNotEmpty) {
+            currentQ = '$currentQ $line';
+          }
+        }
+      }
+
+      pushCurrentQuestion();
+
+      if (parsedSlots.isNotEmpty) {
+        setState(() {
+          _questionsList = parsedSlots;
+
+          final int effectiveDisplayInput = headerDisplayCount ?? customDisplayCount ?? parsedSlots.length;
+          final int targetDisplay = (effectiveDisplayInput > 0)
+              ? (effectiveDisplayInput <= parsedSlots.length ? effectiveDisplayInput : parsedSlots.length)
+              : parsedSlots.length;
+          _displayQuestionCountCtrl.text = '$targetDisplay';
+
+          final int effectiveDurationInput = headerDurationMinutes ?? customDurationMinutes ?? 30;
+          final int targetDur = (effectiveDurationInput > 0) ? effectiveDurationInput : 30;
+          _durationMinutesCtrl.text = '$targetDur';
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(isEn
+                  ? 'Successfully imported ${parsedSlots.length} questions!'
+                  : 'Berhasil mengimpor ${parsedSlots.length} butir soal!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(isEn
+                  ? 'Script format not recognized. Ensure numbering 1., options A-D/E, and Key / Explanation exist.'
+                  : 'Format naskah tidak dikenali. Pastikan ada penomoran 1., pilihan A-D/E, serta Kunci / Pembahasan.'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error importing questions: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 
@@ -352,9 +514,24 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
     final bool isEn =
         _currentLanguage == 'en' || LanguageController.instance.isEnglish;
     final importCtrl = TextEditingController();
+
+    final int defaultDisplay = _questionsList.isNotEmpty ? _questionsList.length : 30;
+    final int defaultDuration = int.tryParse(_durationMinutesCtrl.text) ?? 30;
+
+    final dialogDisplayCtrl = TextEditingController(
+      text: _displayQuestionCountCtrl.text.isNotEmpty
+          ? _displayQuestionCountCtrl.text
+          : '$defaultDisplay',
+    );
+    final dialogDurationCtrl = TextEditingController(
+      text: _durationMinutesCtrl.text.isNotEmpty
+          ? _durationMinutesCtrl.text
+          : '$defaultDuration',
+    );
+
     final cardBg = widget.isDarkMode ? const Color(0xFF0F172A) : Colors.white;
-    final textColor =
-    widget.isDarkMode ? Colors.white : const Color(0xFF0F172A);
+    final textColor = widget.isDarkMode ? Colors.white : const Color(0xFF0F172A);
+    final subTextColor = widget.isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
 
     showDialog(
       context: context,
@@ -382,26 +559,32 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
               children: [
                 Text(
                   isEn
-                      ? 'Copy-paste all questions from Word / PDF in this format:\n\n'
+                      ? 'Copy-paste all questions from Word / PDF (Optional top configuration headers):\n'
+                      'Questions Displayed: 20\n'
+                      'Duration: 25 minutes\n\n'
                       '1. The node storing the next memory address is called...\n'
                       'A. Data\n'
                       'B. Pointer / Next\n'
                       'C. Head\n'
                       'D. Tail\n'
-                      'Key: B\n\n'
-                      '2. The first pointer of a linked list is called...\n'
-                      'A. Head\n'
+                      'Key: B\n'
+                      'Explanation: Node stores payload data and link pointer.\n\n'
+                      '2. First node pointer of a linked list...\n'
+                      '*A. Head\n'
                       'B. Tail\n'
                       '...etc'
-                      : 'Salin (copy-paste) seluruh nomor soal dari file Word / PDF dengan format:\n\n'
+                      : 'Salin (copy-paste) seluruh nomor soal dari file Word / PDF (Opsional baris konfigurasi teratas):\n'
+                      'Jumlah Soal: 20\n'
+                      'Durasi: 25 menit\n\n'
                       '1. Simpul yang menyimpan alamat memori berikutnya disebut...\n'
                       'A. Data\n'
                       'B. Pointer / Next\n'
                       'C. Head\n'
                       'D. Tail\n'
-                      'Kunci: B\n\n'
-                      '2. Pointer pertama linked list dinamakan...\n'
-                      'A. Head\n'
+                      'Kunci Jawaban: B\n'
+                      'Pembahasan: Node tersusun dari nilai data dan pointer penunjuk.\n\n'
+                      '2. Pointer penunjuk simpul pertama linked list dinamakan...\n'
+                      '*A. Head\n'
                       'B. Tail\n'
                       '...dst',
                   style: TextStyle(
@@ -427,6 +610,53 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
                         borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
+                const SizedBox(height: 14),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: dialogDisplayCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        style: TextStyle(color: textColor, fontSize: 12.5),
+                        decoration: InputDecoration(
+                          labelText: isEn
+                              ? 'Questions Displayed'
+                              : 'Jumlah Soal Ditampilkan',
+                          hintText: isEn ? 'Default: Total' : 'Default: Total',
+                          labelStyle: TextStyle(color: subTextColor, fontSize: 11),
+                          prefixIcon: const Icon(Icons.format_list_numbered_rounded,
+                              color: Color(0xFF00F0FF), size: 18),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextFormField(
+                        controller: dialogDurationCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        style: TextStyle(color: textColor, fontSize: 12.5),
+                        decoration: InputDecoration(
+                          labelText: isEn
+                              ? 'Exam Duration (Minutes)'
+                              : 'Durasi Pengerjaan (Menit)',
+                          hintText: '30',
+                          labelStyle: TextStyle(color: subTextColor, fontSize: 11),
+                          prefixIcon: const Icon(Icons.timer_outlined,
+                              color: Colors.amber, size: 18),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -450,9 +680,290 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
                   color: Colors.black, fontWeight: FontWeight.bold),
             ),
             onPressed: () {
+              final int? customDisplay = int.tryParse(dialogDisplayCtrl.text.trim());
+              final int? customDur = int.tryParse(dialogDurationCtrl.text.trim());
+
               Navigator.pop(ctx);
-              _parseAndImportQuestions(importCtrl.text);
+              _parseAndImportQuestions(importCtrl.text, customDisplay, customDur);
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showQuestionDetailDialog(int qIndex) {
+    if (qIndex < 0 || qIndex >= _questionsList.length) return;
+    final bool isEn =
+        _currentLanguage == 'en' || LanguageController.instance.isEnglish;
+    final qItem = Map<String, dynamic>.from(_questionsList[qIndex] as Map);
+
+    final String qIndo = (qItem['q'] ?? qItem['question'] ?? '').toString();
+    final String qEng = (qItem['q_en'] ?? qItem['question_en'] ?? '').toString();
+    final String qText = isEn ? (qEng.trim().isNotEmpty ? qEng : qIndo) : qIndo;
+
+    final List optsIndo = (qItem['options'] as List? ?? []).map((o) => o.toString()).toList();
+    final List optsEng = (qItem['options_en'] as List? ?? []).map((o) => o.toString()).toList();
+    final List opts = isEn ? (optsEng.isNotEmpty ? optsEng : optsIndo) : optsIndo;
+
+    final int ansIdx = qItem['answerIndex'] ?? qItem['answer'] ?? 0;
+    final List letters = ['A', 'B', 'C', 'D'];
+
+    final String expIndo = (qItem['explanation'] ?? '').toString();
+    final String expEng = (qItem['explanation_en'] ?? '').toString();
+    final String expText = isEn ? (expEng.trim().isNotEmpty ? expEng : expIndo) : expIndo;
+
+    final cardBg = widget.isDarkMode ? const Color(0xFF0F172A) : Colors.white;
+    final boxInnerBg = widget.isDarkMode
+        ? const Color(0xFF060913)
+        : const Color(0xFFF1F5F9);
+    final textColor = widget.isDarkMode ? Colors.white : const Color(0xFF0F172A);
+    final subTextColor = widget.isDarkMode
+        ? const Color(0xFF94A3B8)
+        : const Color(0xFF475569);
+    final borderColor = widget.isDarkMode
+        ? const Color(0xFF1E293B)
+        : const Color(0xFFE2E8F0);
+    const accentColor = Color(0xFF00F0FF);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: cardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 13,
+              backgroundColor: accentColor.withValues(alpha: 0.15),
+              child: Text(
+                '${qIndex + 1}',
+                style: const TextStyle(
+                  color: accentColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                isEn
+                    ? 'Question ${qIndex + 1} Details'
+                    : 'Detail Soal No. ${qIndex + 1}',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+              ),
+            ),
+            IconButton(
+              icon: Icon(Icons.close, color: textColor, size: 20),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 580,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Teks Soal Lengkap
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: boxInnerBg,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: SelectableText(
+                    qText,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                Text(
+                  isEn ? 'Answer Choices:' : 'Pilihan Jawaban:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: subTextColor,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Daftar Opsi A, B, C, D Lengkap
+                ...List.generate(opts.length, (optIdx) {
+                  final String letter =
+                  optIdx < letters.length ? letters[optIdx] : 'A';
+                  final bool isKey = optIdx == ansIdx;
+                  final String optText = opts[optIdx].toString();
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isKey
+                          ? Colors.greenAccent.withValues(alpha: 0.1)
+                          : boxInnerBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isKey ? Colors.greenAccent : borderColor,
+                        width: isKey ? 1.5 : 1.0,
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: isKey
+                                ? Colors.greenAccent
+                                : accentColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Text(
+                            letter,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: isKey ? Colors.black : accentColor,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SelectableText(
+                            optText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: textColor,
+                              fontWeight:
+                              isKey ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                        if (isKey) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.greenAccent.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              isEn ? 'Key' : 'Kunci',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.greenAccent,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                }),
+
+                if (expText.trim().isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: accentColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: accentColor.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.lightbulb_outline_rounded,
+                          size: 16,
+                          color: accentColor,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SelectableText.rich(
+                            TextSpan(
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: textColor,
+                                height: 1.35,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: isEn ? 'Explanation: ' : 'Pembahasan: ',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: accentColor,
+                                  ),
+                                ),
+                                TextSpan(text: expText),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() {
+                _questionsList.removeAt(qIndex);
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(isEn
+                      ? 'Question ${qIndex + 1} deleted'
+                      : 'Soal No. ${qIndex + 1} telah dihapus'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            },
+            icon: const Icon(Icons.delete_outline_rounded,
+                color: Colors.redAccent, size: 16),
+            label: Text(
+              isEn ? 'Delete Question' : 'Hapus Soal Ini',
+              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentColor,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              isEn ? 'Close' : 'Tutup',
+              style: const TextStyle(
+                  color: Colors.black, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -510,42 +1021,99 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
     }
 
     final String modulIndo = isEn ? (widget.existingMateri?['modul'] ?? modulName) : modulName;
-    final String modulEng = isEn ? modulName : (widget.existingMateri?['modul_en'] ?? AppText.auto(modulName));
-
     final String titleIndo = isEn ? (widget.existingMateri?['title'] ?? titleName) : titleName;
-    final String titleEng = isEn ? titleName : (widget.existingMateri?['title_en'] ?? AppText.auto(titleName));
-
     final String descIndo = isEn ? (widget.existingMateri?['desc'] ?? descContent) : descContent;
-    final String descEng = isEn ? descContent : (widget.existingMateri?['desc_en'] ?? AppText.auto(descContent));
+
+    // Show auto-translation & saving indicator dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: widget.isDarkMode ? const Color(0xFF0F172A) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+          child: Row(
+            children: [
+              const CircularProgressIndicator(color: Color(0xFF00F0FF)),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Text(
+                  isEn
+                      ? 'Translating & Saving Material (ML Kit Auto Translate)...'
+                      : 'Menerjemahkan Otomatis (ML Kit) & Menyimpan Materi...',
+                  style: TextStyle(
+                    color: widget.isDarkMode ? Colors.white : Colors.black,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
 
     try {
+      await AutoTranslateService.instance.ensureModelsDownloaded();
+
+      final String matId = _isEdit
+          ? widget.existingMateri!['id']
+          : 'mat_${DateTime.now().millisecondsSinceEpoch}';
+
+      int? displayCount = int.tryParse(_displayQuestionCountCtrl.text.trim());
+      int? durationMins = int.tryParse(_durationMinutesCtrl.text.trim());
+
+      if (displayCount != null) {
+        if (displayCount > _questionsList.length && _questionsList.isNotEmpty) {
+          displayCount = _questionsList.length;
+        }
+        if (displayCount < 1) {
+          displayCount = 1;
+        }
+      } else if (_questionsList.isNotEmpty) {
+        displayCount = _questionsList.length;
+      }
+
+      if (durationMins == null || durationMins < 1) {
+        durationMins = 30;
+      }
+
+      // Translate ALL questions in batches of 5 items until 100% complete
+      List<Map<String, dynamic>> finalQuestions = [];
+      try {
+        finalQuestions = await AutoTranslateService.instance
+            .translateAllQuestions(_questionsList);
+      } catch (e) {
+        debugPrint('Notice questions save translate notice: $e');
+        finalQuestions = _questionsList
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+      }
+
+      final MateriModel materiModel =
+      await AutoTranslateService.instance.translateAndCreateMateriModel(
+        id: matId,
+        judulId: titleIndo,
+        deskripsiId: descIndo,
+        modulId: modulIndo,
+        videoUrl: _videoCtrl.text.trim(),
+        questions: finalQuestions,
+        displayQuestionCount: displayCount,
+        durationMinutes: durationMins,
+        createdAt: widget.existingMateri?['createdAt'],
+      );
+
       if (_isEdit) {
-        await TeacherContentHelper.updateMateri(
-          id: widget.existingMateri!['id'],
-          title: titleIndo,
-          titleEn: titleEng,
-          modul: modulIndo,
-          modulEn: modulEng,
-          desc: descIndo,
-          descEn: descEng,
-          videoUrl: _videoCtrl.text.trim(),
-          questions: _questionsList,
-        );
+        await TeacherContentHelper.updateMateriModel(materiModel);
       } else {
-        await TeacherContentHelper.saveMateri(
-          title: titleIndo,
-          titleEn: titleEng,
-          modul: modulIndo,
-          modulEn: modulEng,
-          desc: descIndo,
-          descEn: descEng,
-          videoUrl: _videoCtrl.text.trim(),
-          questions: _questionsList,
-        );
+        await TeacherContentHelper.saveMateriModel(materiModel);
       }
 
       if (!mounted) return;
-      Navigator.pop(context, true);
+      Navigator.pop(context); // Dismiss loading dialog
+      Navigator.pop(context, true); // Return to list
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -566,10 +1134,13 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
         ),
       );
     } catch (e) {
+      if (mounted) Navigator.pop(context); // Dismiss loading dialog on error
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(isEn ? 'Failed to save: $e' : 'Gagal menyimpan: $e'),
+          content: Text(isEn
+              ? 'Error saving material: $e'
+              : 'Gagal menyimpan materi: $e'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -580,6 +1151,9 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
   Widget build(BuildContext context) {
     final bool isEn =
         _currentLanguage == 'en' || LanguageController.instance.isEnglish;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _ensureQuestionsTranslated();
+    });
     final bgColor =
     widget.isDarkMode ? const Color(0xFF060913) : const Color(0xFFF8FAFC);
     final cardBg =
@@ -593,6 +1167,7 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
     widget.isDarkMode ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0);
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: bgColor,
       appBar: AppBar(
         backgroundColor: cardBg,
@@ -617,37 +1192,16 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
             color: textColor,
           ),
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            child: ElevatedButton.icon(
-              onPressed: _handleSave,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: accentColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              icon: Icon(
-                _isEdit ? Icons.save_rounded : Icons.cloud_upload_rounded,
-                color: Colors.black,
-                size: 18,
-              ),
-              label: Text(
-                _isEdit
-                    ? (isEn ? 'Save' : 'Simpan')
-                    : (isEn ? 'Publish' : 'Publikasikan'),
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          MediaQuery.of(context).viewInsets.bottom +
+              MediaQuery.of(context).viewPadding.bottom +
+              24,
+        ),
         child: Form(
           key: _formKey,
           child: Column(
@@ -694,6 +1248,7 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: _modulCtrl,
+                      style: TextStyle(color: textColor, fontSize: 13.5),
                       readOnly: _isExamOnly,
                       validator: (v) => v == null || v.trim().isEmpty
                           ? (isEn
@@ -715,6 +1270,7 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
                     const SizedBox(height: 14),
                     TextFormField(
                       controller: _titleCtrl,
+                      style: TextStyle(color: textColor, fontSize: 13.5),
                       validator: (v) => v == null || v.trim().isEmpty
                           ? (isEn ? 'Title is required' : 'Judul wajib diisi')
                           : null,
@@ -735,6 +1291,7 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
                       const SizedBox(height: 14),
                       TextFormField(
                         controller: _descCtrl,
+                        style: TextStyle(color: textColor, fontSize: 13),
                         maxLines: 8,
                         validator: (v) => v == null || v.trim().isEmpty
                             ? (isEn
@@ -793,6 +1350,7 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
                       const SizedBox(height: 14),
                       TextFormField(
                         controller: _videoCtrl,
+                        style: TextStyle(color: textColor, fontSize: 13.5),
                         decoration: InputDecoration(
                           labelText: isEn
                               ? 'Video URL Link (YouTube / Video Link)'
@@ -953,91 +1511,119 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, qIndex) {
                           final qItem = _questionsList[qIndex] as Map;
-                          final String rawQText = isEn
-                              ? (qItem['q_en'] ?? qItem['question_en'] ?? qItem['q']?.toString() ?? '')
-                              : (qItem['q']?.toString() ?? '');
-                          final List rawOpts = isEn
-                              ? (qItem['options_en'] as List? ?? qItem['options'] as List? ?? [])
-                              : ((qItem['options'] as List?) ?? []);
+                          final String qIndo = (qItem['q'] ?? qItem['question'] ?? '').toString();
+                          final String qEng = (qItem['q_en'] ?? qItem['question_en'] ?? '').toString();
+                          final String qText = isEn ? (qEng.trim().isNotEmpty ? qEng : qIndo) : qIndo;
+
+                          final List optsIndo = (qItem['options'] as List? ?? []).map((o) => o.toString()).toList();
+                          final List optsEng = (qItem['options_en'] as List? ?? []).map((o) => o.toString()).toList();
+                          final List opts = isEn ? (optsEng.isNotEmpty ? optsEng : optsIndo) : optsIndo;
+
                           final int ansIdx = qItem['answerIndex'] ?? qItem['answer'] ?? 0;
                           final List letters = ['A', 'B', 'C', 'D'];
                           final String keyLetter =
                           ansIdx < letters.length ? letters[ansIdx] : 'A';
 
-                          final String qText = _translateIfEn(rawQText);
-                          final List opts = rawOpts
-                              .map((o) => _translateIfEn(o.toString()))
-                              .toList();
-
                           return Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: widget.isDarkMode
-                                  ? const Color(0xFF060913)
-                                  : const Color(0xFFF1F5F9),
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: InkWell(
+                              onTap: () => _showQuestionDetailDialog(qIndex),
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: borderColor),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                CircleAvatar(
-                                  radius: 12,
-                                  backgroundColor:
-                                  accentColor.withValues(alpha: 0.15),
-                                  child: Text(
-                                    '${qIndex + 1}',
-                                    style: const TextStyle(
-                                        color: accentColor,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold),
-                                  ),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: widget.isDarkMode
+                                      ? const Color(0xFF060913)
+                                      : const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: borderColor),
                                 ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        qText,
-                                        style: TextStyle(
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: textColor),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        isEn
-                                            ? 'Options: ${opts.join(" | ")}'
-                                            : 'Pilihan: ${opts.join(" | ")}',
-                                        style: TextStyle(
-                                            fontSize: 11, color: subTextColor),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 12,
+                                          backgroundColor:
+                                          accentColor.withValues(alpha: 0.15),
+                                          child: Text(
+                                            '${qIndex + 1}',
+                                            style: const TextStyle(
+                                                color: accentColor,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                qText,
+                                                style: TextStyle(
+                                                    fontSize: 12.5,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: textColor),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                isEn
+                                                    ? 'Options: ${opts.join(" | ")}'
+                                                    : 'Pilihan: ${opts.join(" | ")}',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: subTextColor),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.greenAccent
+                                                .withValues(alpha: 0.15),
+                                            borderRadius:
+                                            BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            isEn
+                                                ? 'Key: $keyLetter'
+                                                : 'Kunci: $keyLetter',
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.greenAccent),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          isEn
+                                              ? 'Tap to view full details ➔'
+                                              : 'Ketuk untuk lihat detail selengkapnya ➔',
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: accentColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.greenAccent
-                                        .withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    isEn
-                                        ? 'Key: $keyLetter'
-                                        : 'Kunci: $keyLetter',
-                                    style: const TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.greenAccent),
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
                           );
                         },
@@ -1053,16 +1639,20 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
         ),
       ),
       bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          12,
+          16,
+          MediaQuery.of(context).viewPadding.bottom + 12,
+        ),
         decoration: BoxDecoration(
           color: cardBg,
           border: Border(top: BorderSide(color: borderColor)),
         ),
-        child: SafeArea(
-          child: SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton.icon(
+        child: SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: ElevatedButton.icon(
               onPressed: _handleSave,
               style: ElevatedButton.styleFrom(
                 backgroundColor: accentColor,
@@ -1096,7 +1686,6 @@ class _TeacherContentFormScreenState extends State<TeacherContentFormScreen> {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }

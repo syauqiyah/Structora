@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,6 +10,8 @@ import '../utils/app_translations.dart';
 import 'teacher_data_helper.dart';
 import 'student_progress_screen.dart';
 import 'teacher_manage_content_screen.dart';
+import 'teacher_notification_screen.dart';
+import '../widgets/floating_glass_nav_bar.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   final bool isDarkMode;
@@ -49,8 +52,259 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     _fontScale = widget.fontScale;
     _loadTeacherAndStudentData();
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndShowTeacherTutorial();
+    });
+
     // Hubungkan listener bahasa global
     LanguageController.instance.addListener(_onLanguageChanged);
+  }
+
+  Future<void> _checkAndShowTeacherTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String email = prefs.getString('userEmail') ?? _teacherEmail;
+    final String emailClean = email.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+    final String teacherTutorialKey = 'has_seen_tutorial_teacher_$emailClean';
+
+    final bool hasSeenTutorial = (prefs.getBool(teacherTutorialKey) ?? false) ||
+        (prefs.getBool('has_seen_tutorial_teacher') ?? false);
+
+    if (!hasSeenTutorial && mounted) {
+      // Immediately set flags to true so it will NEVER trigger again automatically on future logins or app opens
+      await prefs.setBool(teacherTutorialKey, true);
+      await prefs.setBool('has_seen_tutorial_teacher', true);
+
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (!mounted) return;
+        _showTeacherTutorialDialog();
+      });
+    }
+  }
+
+  void _showTeacherTutorialDialog() async {
+    final prefs = await SharedPreferences.getInstance();
+    final String email = prefs.getString('userEmail') ?? _teacherEmail;
+    final String emailClean = email.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+    final String teacherTutorialKey = 'has_seen_tutorial_teacher_$emailClean';
+    await prefs.setBool(teacherTutorialKey, true);
+    await prefs.setBool('has_seen_tutorial_teacher', true);
+
+    if (!mounted) return;
+
+    final bool isEn = LanguageController.instance.isEnglish;
+    final Color cardBg = _isDark ? const Color(0xFF0F172A) : Colors.white;
+    final Color boxInnerBg = _isDark ? const Color(0xFF060913) : const Color(0xFFF8FAFC);
+    final Color textColor = _isDark ? Colors.white : const Color(0xFF0F172A);
+    final Color subTextColor = _isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
+    final Color borderColor = _isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0);
+    const Color accentCyan = Color(0xFF00F0FF);
+
+    final List<Map<String, dynamic>> teacherFeatures = [
+      {
+        'tag': isEn ? 'FEATURE 1' : 'FITUR 1',
+        'title': isEn ? 'Real-Time Student Analytics 📊' : 'Monitoring Analitik Siswa 📊',
+        'desc': isEn
+            ? 'Track real-time student progress, Pre-Test vs Post-Test score gains, and diagnostic notes for weak topics.'
+            : 'Pantau perkembangan nilai Pre-Test, Post-Test, selisih peningkatan poin, serta analisis diagnostik kelemahan siswa secara real-time.',
+        'icon': Icons.analytics_outlined,
+        'color': const Color(0xFF00F0FF),
+      },
+      {
+        'tag': isEn ? 'FEATURE 2' : 'FITUR 2',
+        'title': isEn ? 'Manage Topics & Video Links 📚' : 'Upload Materi & Video Tutorial 📚',
+        'desc': isEn
+            ? 'Upload or edit learning materials, video tutorial links, and custom module exam question packages easily.'
+            : 'Upload atau edit materi pembelajaran, tautan video tutorial YouTube, serta paket soal asesmen modul dengan mudah.',
+        'icon': Icons.video_library_rounded,
+        'color': const Color(0xFF8B5CF6),
+      },
+      {
+        'tag': isEn ? 'FEATURE 3' : 'FITUR 3',
+        'title': isEn ? 'Quick Import & Exam Settings ⚡' : 'Quick Import Soal & Durasi/Jumlah ⚡',
+        'desc': isEn
+            ? 'Copy-paste question scripts from Word or PDF with optional top headers for Duration and Questions Displayed count.'
+            : 'Salin-tempel naskah soal dari dokumen Word/PDF secara instan lengkap dengan penentuan Durasi Pengerjaan & Jumlah Soal Ditampilkan.',
+        'icon': Icons.bolt_rounded,
+        'color': const Color(0xFFD97706),
+      },
+      {
+        'tag': isEn ? 'FEATURE 4' : 'FITUR 4',
+        'title': isEn ? 'Profile & Teacher Portal 👤' : 'Pengaturan Profil & Akun Guru 👤',
+        'desc': isEn
+            ? 'Customize profile photo, app theme, font scaling, and access official teacher notification alerts.'
+            : 'Atur foto profil guru, ganti tema gelap/terang, skala ukuran font, serta akses notifikasi peringatan akademik guru.',
+        'icon': Icons.person_pin_rounded,
+        'color': const Color(0xFF10B981),
+      },
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: cardBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          top: false,
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.82,
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header Sheet
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: accentCyan.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.school_rounded,
+                              color: accentCyan, size: 22),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isEn ? 'Teacher Guide & Portal Features' : 'Panduan & Fitur Portal Guru',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: textColor,
+                              ),
+                            ),
+                            Text(
+                              isEn ? 'Structora Academic Platform' : 'Platform Pembelajaran Structora',
+                              style: TextStyle(fontSize: 11, color: subTextColor),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close_rounded, color: textColor, size: 24),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                Divider(color: borderColor, height: 24),
+
+                // List Kartu Panduan Fitur Guru
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: teacherFeatures.length,
+                    itemBuilder: (context, idx) {
+                      final item = teacherFeatures[idx];
+                      final Color col = item['color'] as Color;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: boxInnerBg,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: col.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CircleAvatar(
+                              radius: 22,
+                              backgroundColor: col.withValues(alpha: 0.15),
+                              child: Icon(item['icon'] as IconData,
+                                  size: 22, color: col),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 7, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: col.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          item['tag'] as String,
+                                          style: TextStyle(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w900,
+                                            color: col,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    item['title'] as String,
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    item['desc'] as String,
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: subTextColor,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Tombol Selesai
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accentCyan,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      isEn ? 'Understood & Close 🚀' : 'Paham & Tutup Panduan 🚀',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -78,7 +332,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     final prefs = await SharedPreferences.getInstance();
     final name = prefs.getString('userName') ?? 'Ibu Guru';
     final email = prefs.getString('userEmail') ?? 'teacher@structora.app';
-    final img = prefs.getString('teacherCustomImage');
+
+    final String userScopedKey = FirebaseService.getUserKey(email, 'custom_profile_image');
+    final img = prefs.getString(userScopedKey);
 
     final students = await TeacherDataHelper.getRealStudentList();
 
@@ -86,7 +342,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     setState(() {
       _teacherName = name;
       _teacherEmail = email;
-      _customProfileImage = img;
+      _customProfileImage = (img != null && img.isNotEmpty) ? img : null;
       _studentList = students;
       _isLoadingData = false;
     });
@@ -136,7 +392,24 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         final bytes = await image.readAsBytes();
         final base64Image = base64Encode(bytes);
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('teacherCustomImage', base64Image);
+        final String userScopedKey = FirebaseService.getUserKey(_teacherEmail, 'custom_profile_image');
+        await prefs.setString(userScopedKey, base64Image);
+
+        // Also sync photo to Firestore user document
+        try {
+          final user = FirebaseAuth.instance.currentUser;
+          if (user != null) {
+            await FirebaseService.saveUserRole(
+              uid: user.uid,
+              email: _teacherEmail,
+              name: _teacherName,
+              role: 'teacher',
+              photoUrl: base64Image,
+            );
+          }
+        } catch (e) {
+          debugPrint('Error syncing photo to Firestore: $e');
+        }
 
         if (!mounted) return;
         setState(() {
@@ -147,6 +420,68 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     } catch (e) {
       debugPrint('Error pick image: $e');
     }
+  }
+
+  Widget _buildTeacherAvatarWidget({required double radius}) {
+    if (_customProfileImage != null && _customProfileImage!.isNotEmpty) {
+      try {
+        final Uint8List bytes = base64Decode(_customProfileImage!);
+        return CircleAvatar(
+          radius: radius,
+          backgroundColor: const Color(0xFF00F0FF).withValues(alpha: 0.15),
+          backgroundImage: MemoryImage(bytes),
+        );
+      } catch (_) {}
+    }
+
+    final String displayName = _teacherName.isNotEmpty ? _teacherName : _teacherEmail;
+    final String initialLetter = _getInitialLetter(displayName);
+    final Color avatarBgColor = _getInitialAvatarBgColor(displayName);
+
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: avatarBgColor,
+      child: Text(
+        initialLetter,
+        style: TextStyle(
+          fontSize: radius * 0.9,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  Color _getInitialAvatarBgColor(String identifier) {
+    if (identifier.trim().isEmpty) return const Color(0xFF0284C7);
+    final String clean = identifier.trim().toLowerCase();
+    final List<Color> palette = [
+      const Color(0xFF0284C7), // Blue
+      const Color(0xFF10B981), // Emerald Green
+      const Color(0xFF8B5CF6), // Purple
+      const Color(0xFFD97706), // Amber
+      const Color(0xFFEC4899), // Pink
+      const Color(0xFF06B6D4), // Cyan
+      const Color(0xFFF59E0B), // Orange
+      const Color(0xFF6366F1), // Indigo
+      const Color(0xFF14B8A6), // Teal
+      const Color(0xFFE11D48), // Rose Red
+    ];
+    int hash = 0;
+    for (int i = 0; i < clean.length; i++) {
+      hash = clean.codeUnitAt(i) + ((hash << 5) - hash);
+    }
+    return palette[hash.abs() % palette.length];
+  }
+
+  String _getInitialLetter(String nameOrEmail) {
+    final String trimmed = nameOrEmail.trim();
+    if (trimmed.isEmpty) return 'T';
+    final String firstChar = trimmed[0].toUpperCase();
+    if (RegExp(r'[A-Z]').hasMatch(firstChar)) {
+      return firstChar;
+    }
+    return 'T';
   }
 
   void _handleLogout() async {
@@ -173,7 +508,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           onLoginSuccess: _dummyOnLoginSuccess,
         ),
       ),
-      (route) => false,
+          (route) => false,
     );
   }
 
@@ -244,19 +579,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                   width: 2.5,
                                 ),
                               ),
-                              child: CircleAvatar(
-                                radius: 48,
-                                backgroundColor:
-                                accentCyan.withValues(alpha: 0.15),
-                                backgroundImage: _customProfileImage != null
-                                    ? MemoryImage(base64Decode(
-                                    _customProfileImage!))
-                                    : null,
-                                child: _customProfileImage == null
-                                    ? const Icon(Icons.person,
-                                    size: 52, color: accentCyan)
-                                    : null,
-                              ),
+                              child: _buildTeacherAvatarWidget(radius: 48),
                             ),
                             Positioned(
                               bottom: 0,
@@ -469,12 +792,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   Widget _buildScoreBadge(
-    String label,
-    String value,
-    Color color,
-    Color textColor,
-    Color subTextColor,
-  ) {
+      String label,
+      String value,
+      Color color,
+      Color textColor,
+      Color subTextColor,
+      ) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
@@ -515,6 +838,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isEn = LanguageController.instance.isEnglish;
     final bgColor =
     _isDark ? const Color(0xFF060913) : const Color(0xFFF1F5F9);
     final cardBg = _isDark ? const Color(0xFF0F172A) : Colors.white;
@@ -556,6 +880,51 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               ),
             ],
           ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.help_outline_rounded,
+                  color: Color(0xFF00F0FF)),
+              tooltip: isEn ? 'Teacher Guide' : 'Panduan Guru',
+              onPressed: () => _showTeacherTutorialDialog(),
+            ),
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.notifications_active_rounded,
+                      color: Color(0xFF00F0FF)),
+                  tooltip: isEn
+                      ? 'Teacher Notifications & Early Warning'
+                      : 'Notifikasi & Peringatan Dini Akademik Guru',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => TeacherNotificationScreen(
+                          isDarkMode: _isDark,
+                          fontScale: _fontScale,
+                          studentList: _studentList,
+                        ),
+                      ),
+                    ).then((_) => _loadTeacherAndStudentData());
+                  },
+                ),
+                Positioned(
+                  right: 8,
+                  top: 10,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Colors.redAccent,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 6),
+          ],
         ),
         body: _isLoadingData
             ? const Center(child: CircularProgressIndicator(color: accentColor))
@@ -830,17 +1199,17 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                                               decoration: BoxDecoration(
                                                 color: isTuntas
                                                     ? Colors.green
-                                                        .withValues(alpha: 0.15)
+                                                    .withValues(alpha: 0.15)
                                                     : Colors.orange
-                                                        .withValues(alpha: 0.15),
+                                                    .withValues(alpha: 0.15),
                                                 borderRadius:
-                                                    BorderRadius.circular(6),
+                                                BorderRadius.circular(6),
                                                 border: Border.all(
                                                   color: isTuntas
                                                       ? Colors.green
-                                                          .withValues(alpha: 0.4)
+                                                      .withValues(alpha: 0.4)
                                                       : Colors.orange
-                                                          .withValues(alpha: 0.4),
+                                                      .withValues(alpha: 0.4),
                                                 ),
                                               ),
                                               child: Text(
@@ -887,7 +1256,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             TeacherManageContentScreen(isDarkMode: _isDark),
           ],
         ),
-        bottomNavigationBar: BottomNavigationBar(
+        bottomNavigationBar: FloatingGlassNavBar(
+          isDark: _isDark,
           currentIndex: _currentIndex,
           onTap: (index) {
             if (index == 3) {
@@ -896,25 +1266,25 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               setState(() => _currentIndex = index);
             }
           },
-          backgroundColor: cardBg,
-          selectedItemColor: accentColor,
-          unselectedItemColor: subTextColor,
-          type: BottomNavigationBarType.fixed,
           items: [
-            BottomNavigationBarItem(
-              icon: const Icon(Icons.home_rounded),
+            GlassNavItem(
+              icon: Icons.home_outlined,
+              activeIcon: Icons.home_rounded,
               label: AppText.tr('teacher_nav_home'),
             ),
-            BottomNavigationBarItem(
-              icon: const Icon(Icons.people_alt_rounded),
+            GlassNavItem(
+              icon: Icons.people_alt_outlined,
+              activeIcon: Icons.people_alt_rounded,
               label: AppText.tr('teacher_nav_progress'),
             ),
-            BottomNavigationBarItem(
-              icon: const Icon(Icons.upload_file_rounded),
+            GlassNavItem(
+              icon: Icons.upload_file_outlined,
+              activeIcon: Icons.upload_file_rounded,
               label: AppText.tr('teacher_nav_upload'),
             ),
-            BottomNavigationBarItem(
-              icon: const Icon(Icons.person_rounded),
+            GlassNavItem(
+              icon: Icons.person_outline_rounded,
+              activeIcon: Icons.person_rounded,
               label: AppText.tr('teacher_nav_profile'),
             ),
           ],

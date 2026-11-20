@@ -57,10 +57,6 @@ class _AuthScreenState extends State<AuthScreen> {
       _nameCtrl.clear();
       _emailCtrl.clear();
       _passCtrl.clear();
-
-      if (role == 'teacher') {
-        _emailCtrl.text = 'teacher.demo@structora.app';
-      }
     });
 
     try {
@@ -85,67 +81,6 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Future<void> _handleDemoLogin(bool isTeacher) async {
-    if (_isLoading) return;
-    final bool isEn = LanguageController.instance.isEnglish;
-
-    setState(() => _isLoading = true);
-
-    try {
-      if (!kIsWeb) {
-        try {
-          await FirebaseAuth.instance.signOut();
-        } catch (_) {}
-      }
-
-      final String demoName = isTeacher
-          ? (isEn ? 'Demo Teacher' : 'Ibu Guru Demo')
-          : (isEn ? 'Demo Student' : 'Siswa Demo');
-      final String demoEmail =
-          isTeacher ? 'teacher.demo@structora.app' : 'demo@structora.app';
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isLoggedIn', true);
-      await prefs.setString('userName', demoName);
-      await prefs.setString('userEmail', demoEmail);
-      await prefs.setString('lastEmail', demoEmail);
-      await prefs.setBool('isTeacher', isTeacher);
-      await prefs.setString('userRole', isTeacher ? 'teacher' : 'student');
-      await prefs.setInt(
-        'lastActiveTimestamp',
-        DateTime.now().millisecondsSinceEpoch,
-      );
-
-      final String demoUid = 'demo_${isTeacher ? "teacher" : "student"}';
-
-      // Sinkronkan peran ke Firestore di latar belakang (non-blocking)
-      FirebaseService.saveUserRole(
-        uid: demoUid,
-        email: demoEmail,
-        name: demoName,
-        role: isTeacher ? 'teacher' : 'student',
-      );
-
-      if (!isTeacher) {
-        TeacherDataHelper.recordStudentProgress(
-          name: demoName,
-          email: demoEmail,
-          preTestScore: '-',
-          postTestScore: '-',
-          status: isEn ? 'Not Tested' : 'Belum Ujian',
-        );
-      }
-
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      widget.onLoginSuccess(demoName, demoEmail, isTeacher);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-      _showMsg(isEn ? 'Demo login failed: $e' : 'Login demo gagal: $e');
-    }
-  }
-
   Future<void> _handleSubmit() async {
     if (_isLoading) return;
     final bool isEn = LanguageController.instance.isEnglish;
@@ -167,9 +102,7 @@ class _AuthScreenState extends State<AuthScreen> {
       return;
     }
 
-    if (isTeacher &&
-        email != 'teacher.demo@structora.app' &&
-        !email.toLowerCase().endsWith('@structora.app')) {
+    if (isTeacher && !email.toLowerCase().endsWith('@structora.app')) {
       _showMsg(
         isEn
             ? 'Access denied! Teacher Portal requires an official institution email (e.g., name@structora.app)'
@@ -190,6 +123,34 @@ class _AuthScreenState extends State<AuthScreen> {
       final prefs = await SharedPreferences.getInstance();
 
       if (kIsWeb) {
+        final String? registeredRole = await FirebaseService.getUserRoleByUidOrEmail('', email);
+        if (registeredRole != null) {
+          final bool accountIsTeacher = registeredRole == 'teacher' || registeredRole == 'guru';
+          final bool accountIsStudent = registeredRole == 'student' || registeredRole == 'siswa';
+
+          if (!isTeacher && accountIsTeacher) {
+            if (!mounted) return;
+            setState(() => _isLoading = false);
+            _showMsg(
+              isEn
+                  ? 'This account is registered as a Teacher. Please log in using Teacher mode.'
+                  : 'Akun ini terdaftar sebagai Guru. Silakan login melalui mode Guru.',
+            );
+            return;
+          }
+
+          if (isTeacher && accountIsStudent) {
+            if (!mounted) return;
+            setState(() => _isLoading = false);
+            _showMsg(
+              isEn
+                  ? 'This account is registered as a Student. Please log in using Student mode.'
+                  : 'Akun ini terdaftar sebagai Siswa. Silakan login melalui mode Siswa.',
+            );
+            return;
+          }
+        }
+
         String finalName = name;
         if (finalName.isEmpty) {
           String fallback = email.split('@').first;
@@ -201,8 +162,9 @@ class _AuthScreenState extends State<AuthScreen> {
         }
 
         await prefs.setBool('isLoggedIn', true);
-        await prefs.setString('userName', finalName);
+        await prefs.setString('userRole', isTeacher ? 'teacher' : 'student');
         await prefs.setString('userEmail', email);
+        await prefs.setString('userName', finalName);
         await prefs.setString('lastEmail', email);
         await prefs.setBool('isTeacher', isTeacher);
         await prefs.setString('saved_name_$emailClean', finalName);
@@ -212,6 +174,7 @@ class _AuthScreenState extends State<AuthScreen> {
         );
 
         if (!isTeacher) {
+          await FirebaseService.syncUserProgressOnLogin(email);
           await TeacherDataHelper.recordStudentProgress(
             name: finalName,
             email: email,
@@ -298,6 +261,41 @@ class _AuthScreenState extends State<AuthScreen> {
         return;
       }
 
+      // VALIDASI KESESUAIAN ROLE PERAN TERDAFTAR SEBELUM MENYIMPAN SESI LOGIN
+      final String? registeredRole = await FirebaseService.getUserRoleByUidOrEmail(
+        refreshedUser.uid,
+        email,
+      );
+
+      if (registeredRole != null) {
+        final bool accountIsTeacher = registeredRole == 'teacher' || registeredRole == 'guru';
+        final bool accountIsStudent = registeredRole == 'student' || registeredRole == 'siswa';
+
+        if (!isTeacher && accountIsTeacher) {
+          await FirebaseAuth.instance.signOut();
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          _showMsg(
+            isEn
+                ? 'This account is registered as a Teacher. Please log in using Teacher mode.'
+                : 'Akun ini terdaftar sebagai Guru. Silakan login melalui mode Guru.',
+          );
+          return;
+        }
+
+        if (isTeacher && accountIsStudent) {
+          await FirebaseAuth.instance.signOut();
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          _showMsg(
+            isEn
+                ? 'This account is registered as a Student. Please log in using Student mode.'
+                : 'Akun ini terdaftar sebagai Siswa. Silakan login melalui mode Siswa.',
+          );
+          return;
+        }
+      }
+
       String detectedName = refreshedUser.displayName ?? '';
       if (detectedName.isEmpty) {
         String fallback = email.split('@').first;
@@ -317,26 +315,10 @@ class _AuthScreenState extends State<AuthScreen> {
       );
 
       await prefs.setBool('isLoggedIn', true);
+      await prefs.setString('userRole', isTeacher ? 'teacher' : 'student');
+      await prefs.setString('userEmail', email);
       await prefs.setString('userName', detectedName);
       await prefs.setString('saved_name_$emailClean', detectedName);
-      await prefs.setString('userEmail', email);
-      await prefs.setString('lastEmail', email);
-      await prefs.setBool('isTeacher', isTeacher);
-      await prefs.setString('userRole', isTeacher ? 'teacher' : 'student');
-      await prefs.setInt(
-        'lastActiveTimestamp',
-        DateTime.now().millisecondsSinceEpoch,
-      );
-
-      if (!isTeacher) {
-        TeacherDataHelper.recordStudentProgress(
-          name: detectedName,
-          email: email,
-          preTestScore: '-',
-          postTestScore: '-',
-          status: isEn ? 'Not Tested' : 'Belum Ujian',
-        );
-      }
       await prefs.setString('lastEmail', email);
       await prefs.setBool('isTeacher', isTeacher);
       await prefs.setInt(
@@ -345,6 +327,7 @@ class _AuthScreenState extends State<AuthScreen> {
       );
 
       if (!isTeacher) {
+        await FirebaseService.syncUserProgressOnLogin(email);
         await TeacherDataHelper.recordStudentProgress(
           name: detectedName,
           email: email,
@@ -358,6 +341,92 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() => _isLoading = false);
       widget.onLoginSuccess(detectedName, email, isTeacher);
     } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' ||
+          e.code == 'invalid-credential' ||
+          e.code == 'user-not-found') {
+        // Fallback: Cek apakah password cocok dengan kata sandi kustom dari fitur Lupa Password di Firestore / local cache
+        final bool isCustomMatch = await FirebaseService.verifyCustomUserPassword(
+          email: email,
+          inputPassword: pass,
+        );
+
+        if (isCustomMatch) {
+          final String? registeredRole =
+              await FirebaseService.getUserRoleByUidOrEmail('', email);
+
+          if (registeredRole != null) {
+            final bool accountIsTeacher =
+                registeredRole == 'teacher' || registeredRole == 'guru';
+            final bool accountIsStudent =
+                registeredRole == 'student' || registeredRole == 'siswa';
+
+            if (!isTeacher && accountIsTeacher) {
+              if (!mounted) return;
+              setState(() => _isLoading = false);
+              _showMsg(
+                isEn
+                    ? 'This account is registered as a Teacher. Please log in using Teacher mode.'
+                    : 'Akun ini terdaftar sebagai Guru. Silakan login melalui mode Guru.',
+              );
+              return;
+            }
+
+            if (isTeacher && accountIsStudent) {
+              if (!mounted) return;
+              setState(() => _isLoading = false);
+              _showMsg(
+                isEn
+                    ? 'This account is registered as a Student. Please log in using Student mode.'
+                    : 'Akun ini terdaftar sebagai Siswa. Silakan login melalui mode Siswa.',
+              );
+              return;
+            }
+          }
+
+          final prefs = await SharedPreferences.getInstance();
+          String detectedName = prefs.getString('saved_name_$emailClean') ??
+              prefs.getString('userName') ??
+              '';
+          if (detectedName.isEmpty) {
+            String fallback = email.split('@').first;
+            if (fallback.isNotEmpty) {
+              fallback = fallback[0].toUpperCase() + fallback.substring(1);
+            }
+            detectedName = fallback.isEmpty
+                ? (isTeacher ? (isEn ? 'Teacher' : 'Guru') : (isEn ? 'Student' : 'Siswa'))
+                : fallback;
+          }
+
+          await prefs.setBool('isLoggedIn', true);
+          await prefs.setString('userRole', isTeacher ? 'teacher' : 'student');
+          await prefs.setString('userEmail', email);
+          await prefs.setString('userName', detectedName);
+          await prefs.setString('saved_name_$emailClean', detectedName);
+          await prefs.setString('lastEmail', email);
+          await prefs.setBool('isTeacher', isTeacher);
+          await prefs.setInt(
+            'lastActiveTimestamp',
+            DateTime.now().millisecondsSinceEpoch,
+          );
+
+          if (!isTeacher) {
+            await FirebaseService.syncUserProgressOnLogin(email);
+            await TeacherDataHelper.recordStudentProgress(
+              name: detectedName,
+              email: email,
+              preTestScore: '-',
+              postTestScore: '-',
+              status: isEn ? 'Not Tested' : 'Belum Ujian',
+            );
+          }
+
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          widget.onLoginSuccess(detectedName, email, isTeacher);
+          return;
+        }
+      }
+
       if (!mounted) return;
       setState(() => _isLoading = false);
 
@@ -384,6 +453,289 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  void _showForgotPasswordDialog() {
+    final bool isEn = LanguageController.instance.isEnglish;
+
+    final String initialEmail = _emailCtrl.text.trim();
+    final resetEmailCtrl = TextEditingController(text: initialEmail);
+    final newPassCtrl = TextEditingController();
+    final confirmPassCtrl = TextEditingController();
+
+    bool obscureNew = true;
+    bool obscureConfirm = true;
+    bool isSubmittingReset = false;
+
+    final cardBg = widget.isDarkMode ? const Color(0xFF0F172A) : Colors.white;
+    final textColor = widget.isDarkMode ? Colors.white : const Color(0xFF0F172A);
+    final subTextColor = widget.isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF475569);
+    final accentColor = widget.isDarkMode ? const Color(0xFF00F0FF) : const Color(0xFF0284C7);
+    final boxInnerBg = widget.isDarkMode ? const Color(0xFF060913) : const Color(0xFFF1F5F9);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            backgroundColor: cardBg,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: accentColor.withValues(alpha: 0.35), width: 1.2),
+            ),
+            title: Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: accentColor.withValues(alpha: 0.15),
+                  child: Icon(Icons.lock_reset_rounded, color: accentColor, size: 22),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isEn ? 'Reset Password' : 'Reset Password',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.close_rounded, color: textColor, size: 22),
+                  onPressed: isSubmittingReset ? null : () => Navigator.pop(dialogCtx),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isEn
+                        ? 'Enter your registered email and new password. Applicable for both Teacher and Student accounts.'
+                        : 'Masukkan email terdaftar dan password baru. Berlaku untuk akun Guru maupun Siswa.',
+                    style: TextStyle(fontSize: 11.5, color: subTextColor, height: 1.4),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 1. Email Terdaftar
+                  TextField(
+                    controller: resetEmailCtrl,
+                    enabled: !isSubmittingReset,
+                    style: TextStyle(color: textColor, fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: isEn ? 'Registered Email' : 'Email Terdaftar',
+                      labelStyle: TextStyle(color: subTextColor, fontSize: 12),
+                      prefixIcon: Icon(Icons.email_outlined, color: accentColor, size: 20),
+                      filled: true,
+                      fillColor: boxInnerBg,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 2. Password Baru
+                  TextField(
+                    controller: newPassCtrl,
+                    enabled: !isSubmittingReset,
+                    obscureText: obscureNew,
+                    style: TextStyle(color: textColor, fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: isEn ? 'New Password (min. 6 chars)' : 'Password Baru (min. 6 karakter)',
+                      labelStyle: TextStyle(color: subTextColor, fontSize: 12),
+                      prefixIcon: Icon(Icons.lock_outline, color: accentColor, size: 20),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscureNew ? Icons.visibility_off : Icons.visibility,
+                          color: subTextColor,
+                          size: 20,
+                        ),
+                        onPressed: () => setDialogState(() => obscureNew = !obscureNew),
+                      ),
+                      filled: true,
+                      fillColor: boxInnerBg,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 3. Konfirmasi Password Baru
+                  TextField(
+                    controller: confirmPassCtrl,
+                    enabled: !isSubmittingReset,
+                    obscureText: obscureConfirm,
+                    style: TextStyle(color: textColor, fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: isEn ? 'Confirm New Password' : 'Konfirmasi Password Baru',
+                      labelStyle: TextStyle(color: subTextColor, fontSize: 12),
+                      prefixIcon: Icon(Icons.lock_reset_outlined, color: accentColor, size: 20),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                          color: subTextColor,
+                          size: 20,
+                        ),
+                        onPressed: () => setDialogState(() => obscureConfirm = !obscureConfirm),
+                      ),
+                      filled: true,
+                      fillColor: boxInnerBg,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Tombol opsional: Send Reset Email Link
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: isSubmittingReset
+                          ? null
+                          : () async {
+                              final emailToReset = resetEmailCtrl.text.trim();
+                              if (emailToReset.isEmpty ||
+                                  !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(emailToReset)) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(isEn
+                                        ? 'Please enter a valid email address first.'
+                                        : 'Harap masukkan alamat email yang valid terlebih dahulu.'),
+                                    backgroundColor: Colors.orange,
+                                  ),
+                                );
+                                return;
+                              }
+
+                              try {
+                                await FirebaseAuth.instance.sendPasswordResetEmail(email: emailToReset);
+                                if (!mounted) return;
+                                _showMsg(
+                                  isEn
+                                      ? 'Reset link sent to $emailToReset! Check inbox/spam.'
+                                      : 'Tautan reset dikirim ke $emailToReset! Cek inbox/spam Gmail.',
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                _showMsg(
+                                  isEn
+                                      ? 'Error sending email link: $e'
+                                      : 'Gagal mengirim tautan email: $e',
+                                );
+                              }
+                            },
+                      icon: Icon(Icons.mark_email_read_outlined, size: 16, color: accentColor),
+                      label: Text(
+                        isEn ? 'Kirim Link Reset ke Email' : 'Kirim Link Reset ke Email',
+                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: accentColor),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSubmittingReset ? null : () => Navigator.pop(dialogCtx),
+                child: Text(isEn ? 'Cancel' : 'Batal', style: TextStyle(color: subTextColor)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accentColor,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: isSubmittingReset
+                    ? null
+                    : () async {
+                        final emailVal = resetEmailCtrl.text.trim();
+                        final newPass = newPassCtrl.text.trim();
+                        final confirmPass = confirmPassCtrl.text.trim();
+
+                        if (emailVal.isEmpty || newPass.isEmpty || confirmPass.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(isEn ? 'Please fill in all fields.' : 'Harap isi semua kolom.'),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                          return;
+                        }
+
+                        if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(emailVal)) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(isEn ? 'Invalid email format.' : 'Format email tidak valid.'),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                          return;
+                        }
+
+                        if (newPass.length < 6) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(isEn
+                                  ? 'Password must be at least 6 characters.'
+                                  : 'Password minimal 6 karakter.'),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                          return;
+                        }
+
+                        if (newPass != confirmPass) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(isEn
+                                  ? 'Password confirmation does not match.'
+                                  : 'Konfirmasi password tidak cocok.'),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                          return;
+                        }
+
+                        setDialogState(() => isSubmittingReset = true);
+
+                        // Save password into Firestore users collection & local cache
+                        await FirebaseService.updateUserPassword(
+                          email: emailVal,
+                          newPassword: newPass,
+                        );
+
+                        if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+
+                        if (!mounted) return;
+                        // Pre-fill login controllers for user convenience
+                        setState(() {
+                          _emailCtrl.text = emailVal;
+                          _passCtrl.text = newPass;
+                        });
+
+                        _showMsg(
+                          isEn
+                              ? 'Password updated successfully! Please login with your new password.'
+                              : 'Password berhasil diperbarui! Silakan login dengan password baru.',
+                        );
+                      },
+                child: isSubmittingReset
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                      )
+                    : Text(
+                        isEn ? 'Save New Password' : 'Simpan Password Baru',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isEn = LanguageController.instance.isEnglish;
@@ -395,6 +747,7 @@ class _AuthScreenState extends State<AuthScreen> {
     final bool isTeacher = _selectedRole == 'teacher';
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor:
           widget.isDarkMode ? const Color(0xFF060913) : const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -437,7 +790,14 @@ class _AuthScreenState extends State<AuthScreen> {
       ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.fromLTRB(
+            24,
+            24,
+            24,
+            MediaQuery.of(context).viewInsets.bottom +
+                MediaQuery.of(context).viewPadding.bottom +
+                24,
+          ),
           child: SizedBox(
             width: 400,
             child: Column(
@@ -588,7 +948,29 @@ class _AuthScreenState extends State<AuthScreen> {
                     icon: Icons.lock_outline,
                     isPassword: true,
                   ),
-                  const SizedBox(height: 24),
+                  if (!_isRegisterMode) ...[
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _isLoading ? null : _showForgotPasswordDialog,
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: Text(
+                          isEn ? 'Forgot Password?' : 'Lupa Password?',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: isTeacher ? Colors.orangeAccent : accentColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -623,43 +1005,6 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  if (!_isRegisterMode) ...[
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _isLoading
-                            ? null
-                            : () => _handleDemoLogin(isTeacher),
-                        icon: Icon(
-                          isTeacher ? Icons.school_rounded : Icons.flash_on_rounded,
-                          size: 18,
-                          color: isTeacher ? Colors.orangeAccent : accentColor,
-                        ),
-                        label: Text(
-                          isTeacher
-                              ? (isEn ? 'LOG IN AS DEMO TEACHER' : 'MASUK SEBAGAI GURU DEMO')
-                              : (isEn ? 'LOG IN AS DEMO STUDENT' : 'MASUK SEBAGAI SISWA DEMO'),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: isTeacher ? Colors.orangeAccent : accentColor,
-                            fontSize: 12,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          side: BorderSide(
-                            color: isTeacher ? Colors.orangeAccent : accentColor,
-                            width: 1.2,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
                   TextButton(
                     onPressed: _isLoading
                         ? null

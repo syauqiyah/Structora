@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/firebase_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/app_translations.dart';
 import 'teacher_content_helper.dart';
 
@@ -24,12 +24,13 @@ class _TeacherNotificationScreenState
     extends State<TeacherNotificationScreen> {
   String _selectedFilter = 'all'; // 'all', 'upload', 'warning', 'report'
   List<Map<String, dynamic>> _notifications = [];
+  Set<String> _dismissedIds = {};
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _generateTeacherNotifications();
+    _loadNotificationData();
     LanguageController.instance.addListener(_onLanguageChanged);
   }
 
@@ -45,6 +46,88 @@ class _TeacherNotificationScreenState
     }
   }
 
+  Future<void> _loadNotificationData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedDismissed = prefs.getStringList('dismissed_teacher_notif_ids') ?? [];
+    _dismissedIds = savedDismissed.toSet();
+    await _generateTeacherNotifications();
+  }
+
+  Future<void> _dismissSingleNotif(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _dismissedIds.add(id);
+    });
+    await prefs.setStringList('dismissed_teacher_notif_ids', _dismissedIds.toList());
+  }
+
+  Future<void> _clearAllNotifications(List<String> allIds) async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _dismissedIds.addAll(allIds);
+    });
+    await prefs.setStringList('dismissed_teacher_notif_ids', _dismissedIds.toList());
+  }
+
+  void _showClearConfirmDialog(List<String> currentIds) {
+    final bool isEn = LanguageController.instance.isEnglish;
+    final cardBg =
+        widget.isDarkMode ? const Color(0xFF0F172A) : Colors.white;
+    final textColor =
+        widget.isDarkMode ? Colors.white : const Color(0xFF0F172A);
+    final subTextColor =
+        widget.isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF475569);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: cardBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.delete_sweep_rounded,
+                color: Colors.redAccent, size: 24),
+            const SizedBox(width: 8),
+            Text(
+              isEn ? 'Clear Old Notifications?' : 'Bersihkan Notifikasi Lama?',
+              style: TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.bold, color: textColor),
+            ),
+          ],
+        ),
+        content: Text(
+          isEn
+              ? 'This will remove old teacher notifications so they don\'t pile up.'
+              : 'Semua notifikasi lama guru akan dibersihkan agar tidak menumpuk di pusat peringatan.',
+          style: TextStyle(fontSize: 12.5, color: subTextColor, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(isEn ? 'Cancel' : 'Batal',
+                style: const TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFE11D48),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _clearAllNotifications(currentIds);
+            },
+            child: Text(
+              isEn ? 'Clear All' : 'Hapus Semua',
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _generateTeacherNotifications() async {
     final bool isEn = LanguageController.instance.isEnglish;
     final List<Map<String, dynamic>> list = [];
@@ -55,6 +138,8 @@ class _TeacherNotificationScreenState
     try {
       final materiList = await TeacherContentHelper.getMateriList();
       for (var m in materiList) {
+        final String mId = (m['id'] ?? 'm').toString().toLowerCase();
+        final String notifId = 'upload_$mId';
         final String title = isEn
             ? (m['title_en'] ?? m['title'] ?? 'Module')
             : (m['title'] ?? 'Modul');
@@ -65,6 +150,7 @@ class _TeacherNotificationScreenState
         final int dur = int.tryParse((m['durationMinutes'] ?? 30).toString()) ?? 30;
 
         list.add({
+          'id': notifId,
           'category': 'upload',
           'title': isEn
               ? 'Material & Assessment Published 🚀'
@@ -85,9 +171,6 @@ class _TeacherNotificationScreenState
     // 2. PERINGATAN DINI AKADEMIK (EARLY WARNING SYSTEM: REMEDIAL & PASIF)
     // =========================================================================
     final students = widget.studentList;
-    int remedialStudentCount = 0;
-    int passiveStudentCount = 0;
-    int violationStudentCount = 0;
 
     int totalPre = 0;
     int countPre = 0;
@@ -98,6 +181,7 @@ class _TeacherNotificationScreenState
     for (var s in students) {
       final String name = s['name'] ?? (isEn ? 'Student' : 'Siswa');
       final String email = s['email'] ?? '-';
+      final String safeEmail = email.toLowerCase().replaceAll(RegExp(r'[^\w.-]'), '_');
       final String preStr = s['preTest'] ?? '-';
       final String postStr = s['postTest'] ?? '-';
       final String a1 = s['assessment1'] ?? '-';
@@ -126,8 +210,8 @@ class _TeacherNotificationScreenState
 
       // Deteksi Pelanggaran Ujian
       if (violations > 0) {
-        violationStudentCount++;
         list.add({
+          'id': 'violation_$safeEmail',
           'category': 'warning',
           'title': isEn
               ? 'Exam Violation Record 🚨'
@@ -146,24 +230,24 @@ class _TeacherNotificationScreenState
       // Deteksi Remedial (< KKM 75)
       final List<String> weakModules = [];
       if (int.tryParse(a1) != null && int.parse(a1) < 75) {
-        weakModules.add('Modul 1 (${a1})');
+        weakModules.add('Modul 1 ($a1)');
       }
       if (int.tryParse(a2) != null && int.parse(a2) < 75) {
-        weakModules.add('Modul 2 (${a2})');
+        weakModules.add('Modul 2 ($a2)');
       }
       if (int.tryParse(a3) != null && int.parse(a3) < 75) {
-        weakModules.add('Modul 3 (${a3})');
+        weakModules.add('Modul 3 ($a3)');
       }
       if (int.tryParse(a4) != null && int.parse(a4) < 75) {
-        weakModules.add('Modul 4 (${a4})');
+        weakModules.add('Modul 4 ($a4)');
       }
       if (int.tryParse(postStr) != null && int.parse(postStr) < 75) {
-        weakModules.add('Post-Test (${postStr})');
+        weakModules.add('Post-Test ($postStr)');
       }
 
       if (weakModules.isNotEmpty) {
-        remedialStudentCount++;
         list.add({
+          'id': 'remedial_$safeEmail',
           'category': 'warning',
           'title': isEn
               ? 'Academic Early Warning: Remedial Needed ⚠️'
@@ -181,8 +265,8 @@ class _TeacherNotificationScreenState
 
       // Deteksi Siswa Pasif
       if (preStr == '-' || s['status'] == 'Belum Ujian') {
-        passiveStudentCount++;
         list.add({
+          'id': 'passive_$safeEmail',
           'category': 'warning',
           'title': isEn
               ? 'Passive Student Detected ⏳'
@@ -207,6 +291,7 @@ class _TeacherNotificationScreenState
     final double passRate = countPost > 0 ? ((passedPost / countPost) * 100) : 0.0;
 
     list.add({
+      'id': 'report_class_summary',
       'category': 'report',
       'title': isEn
           ? 'Class Score Summary Report 📊'
@@ -222,6 +307,7 @@ class _TeacherNotificationScreenState
     });
 
     list.add({
+      'id': 'report_data_ready',
       'category': 'report',
       'title': isEn
           ? 'Evaluation Data Recap Readiness 📁'
@@ -260,9 +346,15 @@ class _TeacherNotificationScreenState
     const accentColor = Color(0xFF00F0FF);
 
     final filteredList = _notifications.where((n) {
+      final String id = n['id'].toString();
+      if (_dismissedIds.contains(id)) return false;
       if (_selectedFilter == 'all') return true;
       return n['category'] == _selectedFilter;
     }).toList();
+
+    final List<String> activeCategoryIds = filteredList
+        .map((n) => n['id'].toString())
+        .toList();
 
     return MediaQuery(
       data: MediaQuery.of(context).copyWith(
@@ -287,6 +379,16 @@ class _TeacherNotificationScreenState
               color: textColor,
             ),
           ),
+          actions: [
+            if (activeCategoryIds.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.delete_sweep_rounded,
+                    color: Colors.redAccent, size: 22),
+                tooltip:
+                    isEn ? 'Clear Old Notifications' : 'Hapus Notifikasi Lama',
+                onPressed: () => _showClearConfirmDialog(activeCategoryIds),
+              ),
+          ],
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(1),
             child: Container(color: borderColor, height: 1),
@@ -349,15 +451,26 @@ class _TeacherNotificationScreenState
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.mark_email_read_rounded,
-                                      size: 48, color: subTextColor),
-                                  const SizedBox(height: 12),
+                                  const Icon(Icons.mark_email_read_rounded,
+                                      size: 52, color: Color(0xFF00F0FF)),
+                                  const SizedBox(height: 14),
                                   Text(
                                     isEn
                                         ? 'No notifications in this category'
-                                        : 'Tidak ada notifikasi pada kategori ini',
+                                        : 'Notifikasi lama telah dibersihkan',
                                     style: TextStyle(
-                                        color: subTextColor, fontSize: 13),
+                                      color: textColor,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    isEn
+                                        ? 'New alerts will appear automatically when available.'
+                                        : 'Pemberitahuan baru akan muncul secara otomatis.',
+                                    style: TextStyle(
+                                        color: subTextColor, fontSize: 12),
                                   ),
                                 ],
                               ),
@@ -370,97 +483,126 @@ class _TeacherNotificationScreenState
                                 const SizedBox(height: 10),
                             itemBuilder: (context, index) {
                               final item = filteredList[index];
+                              final String notifId = item['id'].toString();
                               final Color tagColor = item['tagColor'] as Color;
                               final Color iconColor =
                                   item['iconColor'] as Color;
 
-                              return Container(
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: cardBg,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: borderColor),
+                              return Dismissible(
+                                key: Key(notifId),
+                                direction: DismissDirection.endToStart,
+                                onDismissed: (_) => _dismissSingleNotif(notifId),
+                                background: Container(
+                                  padding: const EdgeInsets.only(right: 20),
+                                  alignment: Alignment.centerRight,
+                                  decoration: BoxDecoration(
+                                    color:
+                                        Colors.redAccent.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: const Icon(
+                                      Icons.delete_outline_rounded,
+                                      color: Colors.redAccent,
+                                      size: 24),
                                 ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      width: 38,
-                                      height: 38,
-                                      decoration: BoxDecoration(
-                                        color:
-                                            iconColor.withValues(alpha: 0.15),
-                                        shape: BoxShape.circle,
+                                child: Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: cardBg,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: borderColor),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        width: 38,
+                                        height: 38,
+                                        decoration: BoxDecoration(
+                                          color:
+                                              iconColor.withValues(alpha: 0.15),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          item['icon'] as IconData,
+                                          color: iconColor,
+                                          size: 20,
+                                        ),
                                       ),
-                                      child: Icon(
-                                        item['icon'] as IconData,
-                                        color: iconColor,
-                                        size: 20,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 3),
-                                                decoration: BoxDecoration(
-                                                  color: tagColor.withValues(
-                                                      alpha: 0.15),
-                                                  borderRadius:
-                                                      BorderRadius.circular(6),
-                                                  border: Border.all(
-                                                      color: tagColor.withValues(
-                                                          alpha: 0.3)),
-                                                ),
-                                                child: Text(
-                                                  item['tag'].toString(),
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: tagColor,
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 3),
+                                                  decoration: BoxDecoration(
+                                                    color: tagColor.withValues(
+                                                        alpha: 0.15),
+                                                    borderRadius:
+                                                        BorderRadius.circular(6),
+                                                    border: Border.all(
+                                                        color: tagColor.withValues(
+                                                            alpha: 0.3)),
+                                                  ),
+                                                  child: Text(
+                                                    item['tag'].toString(),
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: tagColor,
+                                                    ),
                                                   ),
                                                 ),
-                                              ),
-                                              Text(
-                                                item['timestamp'].toString(),
-                                                style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: subTextColor),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            item['title'].toString(),
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: textColor,
+                                                Text(
+                                                  item['timestamp'].toString(),
+                                                  style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: subTextColor),
+                                                ),
+                                              ],
                                             ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            item['message'].toString(),
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: subTextColor,
-                                              height: 1.4,
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              item['title'].toString(),
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                                color: textColor,
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              item['message'].toString(),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: subTextColor,
+                                                height: 1.4,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                      IconButton(
+                                        icon: Icon(Icons.close_rounded,
+                                            size: 16, color: subTextColor),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        tooltip: isEn ? 'Dismiss' : 'Hapus',
+                                        onPressed: () =>
+                                            _dismissSingleNotif(notifId),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               );
                             },
